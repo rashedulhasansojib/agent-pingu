@@ -111,7 +111,9 @@ These are on the PATH while the plugin is enabled. The implementations live in `
 
 ### Pushing to a public repo
 
-`push` mirrors each task's **full note body** to its Issue. Setup deliberately fills the vault with trust boundaries, retention rules, and landmines, so on a public repo that is publication. It therefore refuses by default, and also refuses when it cannot establish the repo's visibility — guessing wrong is not undoable:
+`push` mirrors each task's **full note body** to its Issue, so it refuses on a public repo by default — and also when it cannot establish the repo's visibility, since guessing wrong is not undoable.
+
+Worth knowing what that actually protects, because the obvious version of the argument is weaker than it sounds. The vault lives inside the repo, so on a public repo those notes are public once committed and the Issue exposes nothing new. What the guard catches is the two cases where it isn't already true: `gh_repo` pointing at a repo other than the one holding the vault, and notes that push publishes before anyone has committed or reviewed them. `INTERNAL` repos are allowed through, on the grounds that everyone the Issue reaches can already read the vault in the repo.
 
 ```bash
 gh-sync push                # refuses on a public repo, and on an unknown one

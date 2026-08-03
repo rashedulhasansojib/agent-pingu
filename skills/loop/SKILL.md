@@ -125,3 +125,5 @@ One page. The point is that the human reviews one page instead of forty notes.
 ## Working style
 
 Work on a branch named `loop/<id>-<slug>`. One pull request at the end, its body generated from the review packet. Mirror tasks to GitHub Issues as you create them (`gh-sync push`) so the team sees work appear in the tracker they already watch, without anyone opening Obsidian.
+
+`push` refuses on a public repo, because it mirrors whole note bodies. If it does, stop and ask — do not pass `--public-ok` on the user's behalf, and do not route around it by pasting note contents in by hand. Whether this project's internal context gets published is theirs to decide, and this is exactly the kind of guard a full-autonomy run exists to respect rather than improvise past.

@@ -118,36 +118,61 @@ def repo_visibility():
         return None
 
 
-def existing_issue(task_id):
-    """The Issue already open for this task, if any.
+TITLE_ID = re.compile(r"^([A-Z]+-\d+):")
+
+
+def issues_by_task():
+    """{task id -> issue number} for every Issue this repo already has.
 
     push writes gh_issue back only after `gh issue create` returns, so a crash
     in that window leaves an Issue no note points at. Looking first means the
     next run adopts it instead of opening a second one.
+
+    Fetched in one call, deliberately. Per-task `--search` would hit GitHub's
+    search API, rate-limited to roughly 30/min rather than the core 5000/hr, and
+    an epic's worth of tasks would exhaust it mid-push. Worse, the lookup runs
+    with check=False, so a throttled call would read as "no existing issue" and
+    open a duplicate — the failure would land exactly where duplicates cost most.
     """
     raw = gh(
-        "issue", "list", "--search", f"{task_id} in:title", "--state", "all",
-        "--json", "number,title", "--limit", "20", *repo_flag(), check=False,
+        "issue", "list", "--state", "all", "--limit", "500",
+        "--json", "number,title", *repo_flag(), check=False,
     )
     if not raw:
-        return None
+        return {}
     try:
         issues = json.loads(raw)
     except json.JSONDecodeError:
-        return None
+        return {}
+    found = {}
     for issue in issues:
-        if str(issue.get("title", "")).startswith(f"{task_id}:"):
-            return str(issue.get("number"))
-    return None
+        match = TITLE_ID.match(str(issue.get("title", "")))
+        if match:
+            found.setdefault(match.group(1), str(issue.get("number")))
+    return found
 
 
 def cmd_push(vault, public_ok=False):
     """Open an Issue per unmirrored task.
 
     Note bodies are mirrored verbatim, and setup deliberately fills the vault
-    with trust boundaries, retention rules, and landmines. On a public repo that
-    is publication, so this refuses by default — including when visibility
-    cannot be established, since guessing wrong cannot be undone.
+    with trust boundaries, retention rules, and landmines — so this refuses on a
+    public repo unless told otherwise.
+
+    Be precise about what that buys, because the obvious argument is weaker than
+    it looks: the vault lives inside the repo it describes, so on a public repo
+    those notes are public the moment they are committed, and mirroring them
+    exposes nothing new to anyone who can already read the repo. Two cases are
+    left, and they are the ones worth a guard:
+
+      - `gh_repo` can point somewhere other than the repo holding the vault, so
+        a private project's notes can be mirrored into a public tracker.
+      - A note is pushed the moment it is written. Committing it is a separate,
+        reviewable step that may never happen — push publishes first.
+
+    INTERNAL is allowed through for the same reason PRIVATE is: everyone it
+    exposes the Issue to can already read the repo the vault sits in. Unknown
+    visibility is refused, because guessing wrong cannot be undone.
     """
     if not public_ok:
         visibility = repo_visibility()
@@ -156,18 +181,20 @@ def cmd_push(vault, public_ok=False):
             print("Check `gh auth status`, or pass --public-ok if you know it is fine.")
             return 1
         if visibility == "PUBLIC":
-            print(f"refusing to push: this repo is {visibility}, and mirroring a task")
-            print("publishes its whole note body — trust boundaries, landmines, and")
-            print("anything else setup wrote. Re-run with --public-ok if that is intended.")
+            print(f"refusing to push: this repo is {visibility}, and push mirrors each")
+            print("task's whole note body — including notes not yet committed, and")
+            print("anything setup wrote about trust boundaries and landmines.")
+            print("Re-run with --public-ok if publishing them is intended.")
             return 1
 
+    already = issues_by_task()
     created = 0
     for path, fm, body in task_notes(vault):
         if read_field(fm, "gh_issue"):
             continue
         task_id = read_field(fm, "id") or path.stem
 
-        adopted = existing_issue(task_id)
+        adopted = already.get(task_id)
         if adopted:
             write_field(path, "gh_issue", adopted)
             print(f"adopted existing #{adopted} for {task_id}")

@@ -12,10 +12,16 @@ import pytest
 
 from conftest import PLUGIN_ROOT
 
+# The eight phases that compete with the router for a request. `setup` is
+# deliberately absent: it is the gate the router defers *to*, so it should keep
+# triggering on "set up the vault" and on SETUP NEEDED without asking first.
 PHASES = ["talk", "research", "adr", "plan", "diagnose", "execute", "verify", "retro"]
 
 # Phrases that claim a raw, unscoped request. These belong to the router, which
-# has to pick the lane before any phase is the right one.
+# has to pick the lane before any phase is the right one. This list is a
+# regression guard over the phrasings that were actually removed — it will not
+# catch a newly invented pushy phrase. The `loop` mention above is the general
+# check; treat this one as a reminder, not a safety net.
 ROUTER_TERRITORY = [
     r"whenever someone describes something they want built",
     r"whenever someone says something is broken",

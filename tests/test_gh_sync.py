@@ -244,3 +244,37 @@ def test_push_creates_when_no_issue_matches_the_task_id(vault, fake_gh):
     gh_sync.cmd_push(vault)
 
     assert fake_gh.created()
+
+
+def test_push_looks_up_existing_issues_once_not_once_per_task(vault, fake_gh):
+    """`--search` hits GitHub's search API, rate-limited to ~30/min rather than
+    the core 5000/hr. A 40-task epic would exhaust it mid-push — and since the
+    lookup runs with check=False, a throttled call reads as "no existing issue"
+    and pushes a duplicate. Fetch the list once instead."""
+    for n in range(1, 41):
+        write_note(vault, f"tasks/T-{n:04d}-x.md", type="task", id=f"T-{n:04d}",
+                   status="todo", title=f"task {n}")
+    fake_gh.replies["issue list"] = "[]"
+    fake_gh.replies["issue create"] = "https://github.com/o/r/issues/1"
+
+    gh_sync.cmd_push(vault)
+
+    lookups = [c for c in fake_gh.calls if c[:2] == ("issue", "list")]
+    assert len(lookups) == 1, f"{len(lookups)} lookups for 40 tasks"
+    assert "--search" not in lookups[0], "still using the rate-limited search API"
+
+
+def test_push_adopts_from_the_bulk_listing(vault, fake_gh):
+    write_note(vault, "tasks/T-0042-x.md", type="task", id="T-0042",
+               status="todo", title="token bucket")
+    write_note(vault, "tasks/T-0043-y.md", type="task", id="T-0043",
+               status="todo", title="limit headers")
+    fake_gh.replies["issue list"] = (
+        '[{"number":7,"title":"T-0042: token bucket"},'
+        ' {"number":8,"title":"T-0043: limit headers"}]')
+
+    gh_sync.cmd_push(vault)
+
+    assert not fake_gh.created()
+    assert "gh_issue: 7" in (vault / "tasks" / "T-0042-x.md").read_text(encoding="utf-8")
+    assert "gh_issue: 8" in (vault / "tasks" / "T-0043-y.md").read_text(encoding="utf-8")
