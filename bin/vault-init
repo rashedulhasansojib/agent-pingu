@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Scaffold the vault in the current repo. See bin/loop for why this exists.
+set -euo pipefail
+exec bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/vault_init.sh" "$@"

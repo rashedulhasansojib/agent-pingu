@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Entry point for the vault tooling.
+#
+# A plugin's bin/ is added to the Bash tool's PATH, so skills can say `loop
+# status` and have it resolve. They cannot say `scripts/loop.py` — the agent's
+# working directory is the user's repo, where that path does not exist.
+set -euo pipefail
+exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/loop.py" "$@"

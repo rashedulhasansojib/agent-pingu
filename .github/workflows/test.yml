@@ -1,0 +1,43 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The tooling claims to run "wherever Python 3 does" and ships no
+        # dependencies, so prove that across the range rather than on one.
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install pytest
+      - run: python -m pytest tests/ -q
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bin/ wrappers and vault_init.sh parse
+        run: |
+          for f in bin/* scripts/vault_init.sh; do bash -n "$f"; done
+      - name: bin/ wrappers are executable
+        run: |
+          for f in bin/*; do test -x "$f" || { echo "$f is not executable"; exit 1; }; done
+
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: plugin.json is valid JSON
+        run: python -c "import json; json.load(open('.claude-plugin/plugin.json'))"
+      - name: hooks.json is valid JSON
+        run: python -c "import json; json.load(open('hooks/hooks.json'))"

@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""Mirror vault task notes to GitHub Issues.
+
+The vault note is the source of truth for task content. The Issue is the
+surface the rest of the team already watches. This script keeps them in step
+without making anyone open Obsidian.
+
+Invoked as `gh-sync <command>` — bin/gh-sync puts this on the Bash tool's PATH.
+
+  gh-sync push     create Issues for tasks lacking gh_issue, write number back
+  gh-sync status   push status changes (close on done, label otherwise)
+  gh-sync pull     append new Issue comments into the note as a thread
+
+`push` refuses on a public repo, because it mirrors note bodies verbatim and the
+vault holds internal context. Pass --public-ok when that is what you want.
+
+Uses the `gh` CLI, so authentication is whatever the developer already has.
+No third-party Python dependencies.
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+# One definition of where the vault is, shared with loop.py. Two scripts each
+# resolving it their own way is how `vault_dir` ends up half-implemented.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from loop import vault_path  # noqa: E402
+
+STATUS_LABELS = {
+    "todo": "loop:todo",
+    "doing": "loop:doing",
+    "blocked": "loop:blocked",
+    "review": "loop:review",
+    "done": "loop:done",
+}
+
+
+def gh(*args, check=True):
+    result = subprocess.run(
+        ["gh", *args], capture_output=True, text=True
+    )
+    if check and result.returncode != 0:
+        raise RuntimeError(f"gh {' '.join(args)} failed: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def split_note(path):
+    """Return (frontmatter_text, body). Empty frontmatter if the note has none."""
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return "", text
+    end = text.find("\n---", 3)
+    if end == -1:
+        return "", text
+    return text[3:end].strip(), text[end + 4 :].lstrip("\n")
+
+
+def read_field(fm, key):
+    # `[^\S\n]*` and not `\s*`: \s matches newlines, so an empty value would
+    # swallow the line break and capture the *next* field's line. `epic:` with
+    # nothing after it then reads as "gh_issue: null", and an empty `gh_issue:`
+    # reads as truthy — which makes push skip that task silently forever.
+    match = re.search(rf"^{re.escape(key)}:[^\S\n]*(.*)$", fm, re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(1).strip().strip('"').strip("'")
+    return None if value in ("", "null", "~") else value
+
+
+def write_field(path, key, value):
+    """Set a frontmatter key in place, adding it if absent."""
+    text = path.read_text(encoding="utf-8")
+    end = text.find("\n---", 3)
+    if not text.startswith("---") or end == -1:
+        # Without a closing delimiter the slices below would splice the file
+        # back together wrongly. Refuse rather than corrupt someone's note.
+        raise ValueError(f"{path}: no frontmatter block to write '{key}' into")
+    fm, rest = text[3:end], text[end:]
+    line = f"{key}: {value}"
+    if re.search(rf"^{re.escape(key)}:", fm, re.MULTILINE):
+        fm = re.sub(rf"^{re.escape(key)}:.*$", line, fm, count=1, flags=re.MULTILINE)
+    else:
+        fm = fm.rstrip("\n") + "\n" + line + "\n"
+    path.write_text("---" + fm + rest, encoding="utf-8")
+
+
+def task_notes(vault):
+    for path in sorted((vault / "tasks").glob("*.md")):
+        fm, body = split_note(path)
+        if read_field(fm, "type") == "task":
+            yield path, fm, body
+
+
+def repo_flag():
+    repo = os.environ.get("CLAUDE_PLUGIN_OPTION_GH_REPO")
+    return ["--repo", repo] if repo else []
+
+
+def ensure_label(name):
+    # No --force: creating a label that already exists is a no-op we can ignore,
+    # but --force would also silently recolour a label the repo already uses for
+    # something else. check=False swallows the "already exists" case.
+    gh("label", "create", name, "--color", "5319e7", *repo_flag(), check=False)
+
+
+def repo_visibility():
+    """PUBLIC, PRIVATE, INTERNAL — or None when gh cannot tell us."""
+    raw = gh("repo", "view", "--json", "visibility", *repo_flag(), check=False)
+    if not raw:
+        return None
+    try:
+        return (json.loads(raw).get("visibility") or "").upper() or None
+    except (json.JSONDecodeError, AttributeError):
+        return None
+
+
+def existing_issue(task_id):
+    """The Issue already open for this task, if any.
+
+    push writes gh_issue back only after `gh issue create` returns, so a crash
+    in that window leaves an Issue no note points at. Looking first means the
+    next run adopts it instead of opening a second one.
+    """
+    raw = gh(
+        "issue", "list", "--search", f"{task_id} in:title", "--state", "all",
+        "--json", "number,title", "--limit", "20", *repo_flag(), check=False,
+    )
+    if not raw:
+        return None
+    try:
+        issues = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    for issue in issues:
+        if str(issue.get("title", "")).startswith(f"{task_id}:"):
+            return str(issue.get("number"))
+    return None
+
+
+def cmd_push(vault, public_ok=False):
+    """Open an Issue per unmirrored task.
+
+    Note bodies are mirrored verbatim, and setup deliberately fills the vault
+    with trust boundaries, retention rules, and landmines. On a public repo that
+    is publication, so this refuses by default — including when visibility
+    cannot be established, since guessing wrong cannot be undone.
+    """
+    if not public_ok:
+        visibility = repo_visibility()
+        if visibility is None:
+            print("refusing to push: could not determine this repo's visibility.")
+            print("Check `gh auth status`, or pass --public-ok if you know it is fine.")
+            return 1
+        if visibility == "PUBLIC":
+            print(f"refusing to push: this repo is {visibility}, and mirroring a task")
+            print("publishes its whole note body — trust boundaries, landmines, and")
+            print("anything else setup wrote. Re-run with --public-ok if that is intended.")
+            return 1
+
+    created = 0
+    for path, fm, body in task_notes(vault):
+        if read_field(fm, "gh_issue"):
+            continue
+        task_id = read_field(fm, "id") or path.stem
+
+        adopted = existing_issue(task_id)
+        if adopted:
+            write_field(path, "gh_issue", adopted)
+            print(f"adopted existing #{adopted} for {task_id}")
+            continue
+
+        title = read_field(fm, "title") or path.stem
+        epic = read_field(fm, "epic")
+        status = read_field(fm, "status") or "todo"
+
+        note_body = (
+            f"{body.strip()}\n\n---\n"
+            f"Mirrored from the project vault: `docs/vault/tasks/{path.name}`\n"
+            f"The vault note is the source of truth for this task's content."
+        )
+        args = ["issue", "create", "--title", f"{task_id}: {title}", "--body", note_body]
+        for label in filter(None, [STATUS_LABELS.get(status), f"epic:{epic}" if epic else None]):
+            ensure_label(label)
+            args += ["--label", label]
+
+        url = gh(*args, *repo_flag())
+        number = url.rstrip("/").split("/")[-1]
+        write_field(path, "gh_issue", number)
+        print(f"created #{number} for {task_id}")
+        created += 1
+    print(f"push complete: {created} issue(s) created")
+    return 0
+
+
+def cmd_status(vault):
+    """Push status changes, and report what actually happened.
+
+    These calls used to run with check=False and print success regardless, so a
+    failed sync was indistinguishable from a working one. The verify phase of
+    this very loop says to record the actual result; the tooling should too.
+    """
+    failed = 0
+    for path, fm, _ in task_notes(vault):
+        number = read_field(fm, "gh_issue")
+        if not number:
+            continue
+        status = read_field(fm, "status") or "todo"
+        problems = []
+
+        label = STATUS_LABELS.get(status)
+        if label:
+            ensure_label(label)
+            others = [v for k, v in STATUS_LABELS.items() if v != label]
+            try:
+                gh(
+                    "issue", "edit", number,
+                    "--add-label", label,
+                    *sum([["--remove-label", o] for o in others], []),
+                    *repo_flag(),
+                )
+            except RuntimeError as exc:
+                problems.append(str(exc))
+        if status == "done":
+            try:
+                gh("issue", "close", number, *repo_flag())
+            except RuntimeError as exc:
+                problems.append(str(exc))
+
+        if problems:
+            failed += 1
+            print(f"#{number} FAILED -> {status}: {problems[0]}")
+        else:
+            print(f"#{number} -> {status}")
+    return 1 if failed else 0
+
+
+def cmd_pull(vault):
+    for path, fm, _ in task_notes(vault):
+        number = read_field(fm, "gh_issue")
+        if not number:
+            continue
+        raw = gh("issue", "view", number, "--json", "comments", *repo_flag(), check=False)
+        if not raw:
+            continue
+        comments = json.loads(raw).get("comments", [])
+        if not comments:
+            continue
+        existing = path.read_text(encoding="utf-8")
+        lines = []
+        for c in comments:
+            marker = f"<!-- gh-comment:{c.get('id')} -->"
+            if marker in existing:
+                continue
+            author = (c.get("author") or {}).get("login", "unknown")
+            lines.append(f"\n{marker}\n**@{author}** ({c.get('createdAt', '')[:10]}):\n\n{c.get('body', '').strip()}\n")
+        if not lines:
+            continue
+        if "## Thread" not in existing:
+            existing = existing.rstrip("\n") + "\n\n## Thread\n"
+        path.write_text(existing.rstrip("\n") + "\n" + "".join(lines), encoding="utf-8")
+        print(f"pulled {len(lines)} comment(s) into {path.name}")
+    return 0
+
+
+def main():
+    args = sys.argv[1:]
+    public_ok = "--public-ok" in args
+    args = [a for a in args if a != "--public-ok"]
+
+    if not args or args[0] not in ("push", "status", "pull"):
+        print(__doc__)
+        return 1
+    vault = vault_path()
+    if not (vault / "tasks").is_dir():
+        print(f"no tasks directory at {vault / 'tasks'}")
+        return 1
+    if args[0] == "push":
+        return cmd_push(vault, public_ok=public_ok) or 0
+    return {"status": cmd_status, "pull": cmd_pull}[args[0]](vault) or 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

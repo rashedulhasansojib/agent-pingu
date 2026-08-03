@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "agentic-loop",
+  "displayName": "Agentic Loop Engineering",
+  "version": "0.3.0",
+  "description": "Vault-backed engineering loop for any development work: talk, research, ADR, plan, diagnose, execute, verify, retro. State lives in a project-local Obsidian vault; tasks mirror to GitHub Issues.",
+  "keywords": ["obsidian", "adr", "planning", "workflow", "agentic", "github", "review"],
+  "license": "MIT",
+  "userConfig": {
+    "vault_dir": {
+      "type": "string",
+      "title": "Vault directory",
+      "description": "Path to the vault, relative to the repo root.",
+      "default": "docs/vault"
+    },
+    "gh_repo": {
+      "type": "string",
+      "title": "GitHub repo",
+      "description": "owner/repo for Issue mirroring. Leave empty to use the current git remote.",
+      "required": false
+    },
+    "autonomy": {
+      "type": "string",
+      "title": "Autonomy level",
+      "description": "full-loop runs the whole lane then stops once for review. gated stops after every phase.",
+      "default": "full-loop"
+    }
+  }
+}
