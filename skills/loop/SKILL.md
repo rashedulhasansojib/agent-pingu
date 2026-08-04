@@ -85,7 +85,7 @@ Run `loop gate <phase>` at the end of every phase. Do not assess your own gate; 
 
 `loop gate` with no phase gates whatever `loop status` currently infers.
 
-The command is honest rather than reassuring: on most phases it will end with checks still outstanding. That is the correct answer, not a shortfall — four of the nine gates below are genuinely human judgement.
+The command is honest rather than reassuring: on most phases it will end with checks still outstanding. That is the correct answer, not a shortfall. Only `talk`, `research` and `plan` can be settled entirely by tooling; `adr` and `diagnose` are pure human judgement, and the remaining four are part-checked with a manual component you have to speak to.
 
 | Phase | Cannot advance until |
 |---|---|

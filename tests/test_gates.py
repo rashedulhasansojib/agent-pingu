@@ -287,3 +287,24 @@ def test_ready_stays_false_while_a_command_is_only_planned(ready_vault):
 
     assert "test suite passes" in result["pending"]
     assert result["ready"] is False
+
+
+# ------------------------------------------------------- what the docs promise
+
+def test_the_documented_split_of_checkable_versus_manual_still_holds():
+    """README, MANUAL and loop/SKILL.md all state this breakdown in prose. It
+    was stated wrong once already — written from the design note before the
+    gates were built. If GATES changes, fix those three files too."""
+    fully_checkable, partly_manual, entirely_manual = [], [], []
+    for phase, checks in loop.GATES.items():
+        kinds = {c.kind for c in checks}
+        if kinds == {"manual"}:
+            entirely_manual.append(phase)
+        elif "manual" in kinds:
+            partly_manual.append(phase)
+        else:
+            fully_checkable.append(phase)
+
+    assert fully_checkable == ["talk", "research", "plan"]
+    assert partly_manual == ["setup", "execute", "verify", "retro"]
+    assert entirely_manual == ["adr", "diagnose"]

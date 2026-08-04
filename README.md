@@ -35,6 +35,58 @@ The loop picks one from the request rather than forcing everything through a fea
 | spike | talk → research → retro |
 | chore | execute → verify |
 
+## Gates
+
+Every phase has an exit condition. `loop gate <phase>` evaluates it, so the model
+isn't asked whether it met its own gate — the one party that can't answer that.
+
+```bash
+loop gate                     # gate whatever phase `loop status` infers
+loop gate verify              # show what would run
+loop gate verify --execute    # actually run the declared commands
+```
+
+Each check comes back as one of five verdicts, and the last two are the reason
+this is worth having:
+
+| Verdict | Means |
+|---|---|
+| `passed` / `failed` | Genuinely checked. A `failed` stops the phase. |
+| `planned` | A command gate, not run. Running your suite is a side effect, so you opt in with `--execute`. |
+| `not-declared` | A command gate whose command the vault never declared. **Not a pass.** |
+| `manual-review` | No tool can decide this. **Never auto-passes.** |
+
+Checks come in three kinds — `vault` (computed from the notes), `command` (runs
+what `context.md` declares), and `manual`. Only three gates are settleable by
+tooling alone:
+
+| Gate | What the runner can do |
+|---|---|
+| `talk` `research` `plan` | Fully checked |
+| `setup` `execute` `verify` `retro` | Part checked, part manual |
+| `adr` `diagnose` | Entirely human judgement |
+
+So most phases end with checks still outstanding. **That is the intended answer.**
+Forcing every gate into something machine-checkable is exactly how a green tick
+stops meaning anything, and an honest "two checks passed, one needs your eyes"
+is worth more than a confident tick that meant "the model said so."
+
+### Declaring the commands
+
+`verify` and `execute` run whatever `context.md` declares in its frontmatter:
+
+```yaml
+test_command: ["pytest", "-q"]
+lint_command: ["ruff", "check", "."]
+```
+
+`setup` fills these in from your test config and CI. Leave them empty and the
+gate reports `not-declared` rather than passing.
+
+**Lists, never strings.** A list goes straight to the process; a string would
+need a shell to interpret, and `context.md` is a file the model writes. A string
+is rejected with a message telling you to use a list.
+
 ## Layout
 
 ```
@@ -108,7 +160,9 @@ before. `gh` is the only thing stubbed.
 
 ## Extending
 
-Add a phase: drop a folder in `skills/`, add it to the lane table in `skills/loop/SKILL.md` **and to `LANES` in `scripts/loop.py`**, and add its note type to the schema in `skills/vault/SKILL.md`.
+Add a phase: drop a folder in `skills/`, add it to the lane table in `skills/loop/SKILL.md` **and to `LANES` in `scripts/loop.py`**, add its gate to the gate table **and to `GATES`**, and add its note type to the schema in `skills/vault/SKILL.md`. `tests/test_skills.py` fails if any of those pairs drift apart, which is the point of it.
+
+When you write the gate, reach for a `manual` check rather than approximating one. A gate that pretends to check something it can't is worse than one that says a human has to look.
 
 Write the description to name the artifact it owns and the precondition it needs, then defer anything vaguer to `loop`. The instinct is to write it pushy, because a single skill in isolation does tend to under-trigger — but every phase you make pushier competes with the router for the same request, and the router is the one that picks the lane and checks the setup gate. Pushiness belongs in `loop` alone.
 

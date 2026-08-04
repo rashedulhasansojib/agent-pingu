@@ -131,7 +131,7 @@ loop gate verify         # show what would run
 loop gate verify --execute
 ```
 
-Four of the nine gates are genuinely human judgement, so most phases end with checks still outstanding. That is the intended answer — a green tick that meant "the model said so" is what this replaces.
+Only three of the nine gates — `talk`, `research`, `plan` — can be settled by tooling alone. `adr` and `diagnose` are entirely human judgement; the other four are part-checked and part-manual. So most phases end with checks still outstanding, and that is the intended answer — a green tick that meant "the model said so" is what this replaces.
 
 For the command gates, declare the commands in `context.md`'s frontmatter:
 
