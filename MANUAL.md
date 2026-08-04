@@ -6,12 +6,23 @@ Brief instructions for daily use. Read once; keep the lane table handy.
 
 ## 1. Install
 
+A folder under a skills directory containing `.claude-plugin/plugin.json` is
+discovered in place — there is nothing to install:
+
 ```bash
-unzip agent-pingu.zip -d ~/.claude/skills/     # personal
-# or: unzip into <repo>/.claude/skills/         # shared with the team via git
+git clone <this repo> ~/.claude/skills/agent-pingu          # personal
+git clone <this repo> <repo>/.claude/skills/agent-pingu     # shared via git
 ```
 
 Restart Claude Code. Confirm with `claude plugin list` — you should see `agent-pingu@skills-dir`.
+
+Developing the plugin itself? Symlink instead, so edits apply in place:
+
+```bash
+ln -s /path/to/agent-pingu ~/.claude/skills/agent-pingu
+```
+
+A project-scope copy under `<repo>/.claude/skills/` loads only when Claude Code starts from that directory — it does not walk up to the repo root the way plain skills do. Start from the repo root, or run `/reload-plugins` after changing directories.
 
 ## 2. Set up a repo
 

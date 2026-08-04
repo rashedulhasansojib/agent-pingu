@@ -12,8 +12,19 @@ The second reason matters more: **prompting skill varies across a team, and it s
 
 ## Install
 
+Any folder under a skills directory that contains `.claude-plugin/plugin.json`
+loads as a plugin — no marketplace, no install step. So put this there:
+
 ```bash
-unzip agent-pingu.zip -d ~/.claude/skills/
+git clone <this repo> ~/.claude/skills/agent-pingu        # personal
+# or, into a repo, to share it with the team through git:
+git clone <this repo> <your repo>/.claude/skills/agent-pingu
+```
+
+Restart Claude Code and confirm with `claude plugin list` — you should see
+`agent-pingu@skills-dir`. Then scaffold a repo:
+
+```bash
 cd <your repo> && ~/.claude/skills/agent-pingu/scripts/vault_init.sh
 ```
 

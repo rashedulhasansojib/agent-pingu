@@ -379,3 +379,28 @@ def test_the_manual_vault_tree_invents_nothing():
     # which is a container rather than something the mkdir creates.
     for name in re.findall(r"^\s+([a-z][a-z._-]*)/", tree, re.MULTILINE):
         assert name in created, f"MANUAL claims {name}/ which vault-init never creates"
+
+
+@pytest.mark.parametrize("doc", ["README.md", "MANUAL.md"])
+def test_the_install_instructions_reference_something_that_exists(doc):
+    """Both docs told people to `unzip agent-pingu.zip` for the whole life of
+    the project. Nothing ever produced that zip, so the documented install was
+    impossible — and the rename guard did not catch it, because the command was
+    wrong rather than stale."""
+    text = (PLUGIN_ROOT / doc).read_text(encoding="utf-8")
+
+    for artifact in re.findall(r"unzip\s+(\S+)", text):
+        assert (PLUGIN_ROOT / artifact).exists(), (
+            f"{doc} says to unzip {artifact}, which nothing in this repo builds")
+
+
+@pytest.mark.parametrize("doc", ["README.md", "MANUAL.md"])
+def test_the_install_instructions_name_a_skills_directory(doc):
+    """A skills-directory plugin only loads from one. If the install section
+    stops saying so, it stops working."""
+    text = (PLUGIN_ROOT / doc).read_text(encoding="utf-8")
+    install = re.search(r"^#+ .*Install.*$", text, re.MULTILINE)
+    assert install, f"{doc} has no install section"
+
+    section = text[install.end():install.end() + 1200]
+    assert ".claude/skills/" in section, f"{doc} never names a skills directory"

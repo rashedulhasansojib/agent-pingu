@@ -735,12 +735,12 @@ def main(argv):
         return cmd_doctor(vault)
     if cmd == "next-id":
         if len(argv) < 3 or argv[2] not in TYPES:
-            print(f"usage: pingu.py next-id <{'|'.join(TYPES)}>", file=sys.stderr)
+            print(f"usage: pingu next-id <{'|'.join(TYPES)}>", file=sys.stderr)
             return 1
         return cmd_next_id(vault, argv[2])
     if cmd == "new":
         if len(argv) < 4 or argv[2] not in TYPES:
-            print(f"usage: pingu.py new <{'|'.join(TYPES)}> <title>", file=sys.stderr)
+            print(f"usage: pingu new <{'|'.join(TYPES)}> <title>", file=sys.stderr)
             return 1
         return cmd_new(vault, argv[2], " ".join(argv[3:]))
 
