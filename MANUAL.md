@@ -90,6 +90,10 @@ Delegated automatically; you can also ask for one by name.
 
 `security-reviewer` runs unprompted on anything touching auth, secrets, personal data, payments, or file and network access.
 
+`architect` and the three reviewers are restricted to `Read, Grep, Glob, Bash` (plus web access for the first two) — they cannot write files at all. That also means they see no MCP tools, since an allowlist strips those too. `senior-engineer` and `sqa` keep the full inherited pool for exactly that reason.
+
+`architect` and `senior-engineer` start with the `vault` skill already in context, so they know the note schema and ID rules without going to look; `architect` also gets `domain-modeling`, because naming boundaries is most of what it does.
+
 ## 6. Tooling
 
 ```bash

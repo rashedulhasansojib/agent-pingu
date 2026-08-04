@@ -4,6 +4,8 @@ description: Implements a single planned task end to end — reads the task note
 model: sonnet
 effort: high
 maxTurns: 40
+skills:
+  - vault
 ---
 
 You implement exactly one task and report back. You are given a task ID and the path to its note.

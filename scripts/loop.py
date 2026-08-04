@@ -31,6 +31,24 @@ SCALAR_KEYS = (
     "owner", "updated", "created", "work_type",
 )
 
+# Where parse_frontmatter records every key a note declared, including the list
+# ones it does not parse. Presence and value are different questions: a
+# scaffolded ADR carries `deciders: []`, which is empty but not missing.
+DECLARED = "_declared"
+
+# What each note type must declare, from the schema in skills/vault/SKILL.md.
+# Presence only — an empty `epic:` on a freshly scaffolded task is a workflow
+# state, but a task with no epic key at all is a note somebody hand-wrote and
+# the board will silently drop.
+REQUIRED_FIELDS = {
+    "brief": ("id", "title", "status", "work_type"),
+    "epic": ("id", "title", "status", "work_type"),
+    "task": ("id", "title", "status", "work_type", "epic"),
+    "adr": ("id", "title", "status", "deciders"),
+    "research": ("id", "title", "status"),
+    "retro": ("id", "title", "status"),
+}
+
 TASKISH = {"todo", "doing", "blocked", "review", "done"}
 ADR_STATUS = {"proposed", "accepted", "superseded"}
 NOTE_STATUS = {"draft", "locked", "blocked", "done", "deferred", "template", "ready"}
@@ -111,12 +129,13 @@ def parse_frontmatter(path):
     end = text.find("\n---", 3)
     if end == -1:
         return {}
-    meta = {}
+    meta = {DECLARED: set()}
     for line in text[3:end].splitlines():
         if ":" not in line or line.lstrip().startswith("#"):
             continue
         key, _, value = line.partition(":")
         key = key.strip()
+        meta[DECLARED].add(key)
         if key not in SCALAR_KEYS:
             continue
         value = value.strip().strip('"').strip("'")
@@ -380,13 +399,17 @@ def cmd_doctor(vault):
     problems = []
 
     # Index notes (context, glossary, standards) are addressed by filename and
-    # legitimately carry no ID. Only the numbered types need one.
+    # legitimately carry no ID or work_type. Only the types in REQUIRED_FIELDS
+    # are held to a schema.
     seen = {}
     for n in notes:
+        where = n.get("id") or n["path"].relative_to(vault)
+        for field in REQUIRED_FIELDS.get(n["type"], ()):
+            if field not in n[DECLARED]:
+                problems.append(f"{where}: missing required field '{field}'")
+
         nid = n.get("id")
         if not nid:
-            if n["type"] in TYPES or n["type"] == "brief":
-                problems.append(f"missing id: {n['path'].relative_to(vault)}")
             continue
         if nid in seen:
             problems.append(

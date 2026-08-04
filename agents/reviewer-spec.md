@@ -4,7 +4,7 @@ description: Reviews a diff purely against what it was supposed to do — the br
 model: sonnet
 effort: high
 maxTurns: 25
-disallowedTools: Write, Edit
+tools: Read, Grep, Glob, Bash
 ---
 
 You review a diff for faithfulness, not for craft. Style, naming, and structure are another reviewer's job.

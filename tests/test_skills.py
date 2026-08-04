@@ -98,3 +98,130 @@ def test_frontmatter_has_no_unquoted_colon_space(path):
             f"{path.parent.name}/{path.name} — '{key}' contains an unquoted "
             f'": " so the whole frontmatter block fails to parse. '
             f"Use an em dash, or quote the value.")
+
+
+# ------------------------------------------------------------------ lane table
+
+def lane_table():
+    """The lane table from loop/SKILL.md, as {lane: (phases, optional)}.
+
+    Mirrors the parse ccw's check-skills-index.mjs does over its own index:
+    read the human-facing document, and diff it against the machine-readable
+    structure the tooling actually runs on.
+    """
+    text = (PLUGIN_ROOT / "skills" / "loop" / "SKILL.md").read_text(encoding="utf-8")
+    # Scope to the "Pick the lane" section. The agents table further down has
+    # the same row shape (`| \`architect\` | ... |`) and would otherwise be
+    # parsed as lanes named after agents.
+    section = re.search(r"^## Pick the lane$(.*?)^## ", text, re.MULTILINE | re.DOTALL)
+    assert section, "loop/SKILL.md no longer has a '## Pick the lane' section"
+    lanes = {}
+    for row in re.finditer(r"^\|\s*`(\w+)`\s*\|([^|]+)\|", section.group(1), re.MULTILINE):
+        lane, cell = row.group(1), row.group(2)
+        phases, optional = [], set()
+        for token in cell.split("->"):
+            # "talk (brief)" and "retro (**required**)" are annotations for the
+            # reader; a trailing ? is the table's mark for a skippable phase.
+            token = re.sub(r"\([^)]*\)", "", token).replace("*", "").strip()
+            if not token:
+                continue
+            if token.endswith("?"):
+                token = token[:-1]
+                optional.add(token)
+            phases.append(token)
+        lanes[lane] = (tuple(phases), optional)
+    return lanes
+
+
+def test_the_lane_table_is_parseable_at_all():
+    """If the table's shape changes, the tests below would silently pass on an
+    empty dict. Anchor them."""
+    assert set(lane_table()) == {"feature", "bug", "incident", "refactor", "spike", "chore"}
+
+
+@pytest.mark.parametrize("lane", ["feature", "bug", "incident", "refactor", "spike", "chore"])
+def test_lane_phases_match_the_code(lane):
+    """`loop/SKILL.md`'s table and `LANES` in loop.py are the same state machine
+    written twice. Order matters — it is what infer_phase walks."""
+    import loop as loop_py
+
+    documented, _ = lane_table()[lane]
+    assert loop_py.LANES[lane] == documented, (
+        f"{lane}: SKILL.md says {documented}, LANES says {loop_py.LANES[lane]}")
+
+
+@pytest.mark.parametrize("lane", ["feature", "bug", "incident", "refactor", "spike", "chore"])
+def test_skippable_phases_match_the_code(lane):
+    """A `?` in the table is the same claim as membership in OPTIONAL. A phase
+    documented as skippable but not in OPTIONAL wedges the state machine."""
+    import loop as loop_py
+
+    _, documented = lane_table()[lane]
+    assert set(loop_py.OPTIONAL.get(lane, frozenset())) == documented, (
+        f"{lane}: SKILL.md marks {documented or '{}'} skippable, "
+        f"OPTIONAL has {set(loop_py.OPTIONAL.get(lane, frozenset())) or '{}'}")
+
+
+# ---------------------------------------------------------------------- agents
+
+READ_ONLY_AGENTS = ["architect", "security-reviewer", "reviewer-standards", "reviewer-spec"]
+
+
+def agent_frontmatter(name):
+    lines = frontmatter_lines(PLUGIN_ROOT / "agents" / f"{name}.md")
+    fields, current = {}, None
+    for line in lines:
+        if line.startswith(("  -", "\t-")):
+            fields.setdefault(current, []).append(line.split("-", 1)[1].strip())
+            continue
+        key, sep, value = line.partition(":")
+        if sep:
+            current = key.strip()
+            fields[current] = value.strip() if value.strip() else []
+    return fields
+
+
+@pytest.mark.parametrize("name", READ_ONLY_AGENTS)
+def test_read_only_agents_use_a_tools_allowlist(name):
+    """An allowlist denies by default; `disallowedTools` only removes what it
+    names. For agents whose entire job is to read and report, the allowlist is
+    the honest expression of that."""
+    fields = agent_frontmatter(name)
+
+    assert "tools" in fields, f"{name} still relies on inheritance"
+    allowed = {t.strip() for t in fields["tools"].split(",")}
+    assert not (allowed & {"Write", "Edit", "NotebookEdit"}), (
+        f"{name} is meant to report, not edit: {allowed}")
+    assert "Read" in allowed
+
+
+@pytest.mark.parametrize("name", READ_ONLY_AGENTS)
+def test_an_allowlisted_agent_does_not_also_carry_a_denylist(name):
+    """Both is confusing and implies the denylist is doing work it isn't."""
+    assert "disallowedTools" not in agent_frontmatter(name)
+
+
+def test_agents_that_may_need_mcp_tools_keep_their_inherited_pool():
+    """A `tools:` allowlist strips every MCP tool, not just built-ins. These two
+    do open-ended work in someone else's repo, where a project's MCP server may
+    be exactly what they need, so they stay on inheritance deliberately."""
+    for name in ("senior-engineer", "sqa"):
+        assert "tools" not in agent_frontmatter(name), (
+            f"{name} was given an allowlist, which silently removes MCP tools")
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("architect", {"vault", "domain-modeling"}),
+    ("senior-engineer", {"vault"}),
+])
+def test_agents_preload_the_disciplines_they_depend_on(name, expected):
+    """Both agents are told in prose to follow the vault's conventions. Preloading
+    injects that content at startup instead of hoping they go and read it."""
+    assert set(agent_frontmatter(name).get("skills", [])) == expected
+
+
+@pytest.mark.parametrize("name", ["reviewer-standards", "reviewer-spec"])
+def test_the_blind_reviewers_preload_nothing(name):
+    """Preloading `vault` would hand both reviewers a map to `brief.md`. The
+    separation is already only a convention; do not spend it for convenience."""
+    assert not agent_frontmatter(name).get("skills")

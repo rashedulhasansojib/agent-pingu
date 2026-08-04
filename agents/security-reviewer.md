@@ -4,7 +4,7 @@ description: Threat-models a change and reviews it for security weaknesses — a
 model: opus
 effort: high
 maxTurns: 30
-disallowedTools: Write, Edit
+tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---
 
 You look for what an attacker would find. You cannot edit files — you report.

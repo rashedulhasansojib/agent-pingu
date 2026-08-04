@@ -166,18 +166,22 @@ def test_an_empty_vault_still_reports_talk(ready_vault):
 # ------------------------------------------------------------------------- doctor
 
 def test_doctor_accepts_a_path_qualified_wikilink(run_loop, vault):
-    """Obsidian resolves [[standards/engineering]]; doctor must not call it broken."""
-    write_note(vault, "tasks/T-0001-x.md", type="task", id="T-0001", status="todo",
+    """Obsidian resolves [[standards/engineering]]; doctor must not call it broken.
+
+    Written as a research note so the assertion isolates link resolution — a
+    task would also have to satisfy the task schema to reach rc 0."""
+    write_note(vault, "research/R-0001-x.md", type="research", id="R-0001", status="done",
                title="see [[standards/engineering]]")
 
     assert run_loop("doctor") == 0
 
 
 def test_doctor_accepts_an_aliased_wikilink(run_loop, vault):
-    write_note(vault, "tasks/T-0001-x.md", type="task", id="T-0001", status="todo",
-               title="x")
-    (vault / "tasks" / "T-0001-x.md").write_text(
-        "---\ntype: task\nid: T-0001\nstatus: todo\n---\n\nsee [[glossary|our words]]\n",
+    write_note(vault, "research/R-0001-x.md", type="research", id="R-0001",
+               status="done", title="x")
+    (vault / "research" / "R-0001-x.md").write_text(
+        "---\ntype: research\nid: R-0001\ntitle: x\nstatus: done\n---\n\n"
+        "see [[glossary|our words]]\n",
         encoding="utf-8")
 
     assert run_loop("doctor") == 0
@@ -185,8 +189,8 @@ def test_doctor_accepts_an_aliased_wikilink(run_loop, vault):
 
 def test_doctor_ignores_wikilinks_inside_fenced_code(run_loop, vault):
     """The board and every schema example in this vault are fenced code blocks."""
-    (vault / "tasks" / "T-0001-x.md").write_text(
-        "---\ntype: task\nid: T-0001\nstatus: todo\n---\n\n"
+    (vault / "research" / "R-0001-x.md").write_text(
+        "---\ntype: research\nid: R-0001\ntitle: x\nstatus: done\n---\n\n"
         "```yaml\nadrs: [\"[[ADR-0003-token-bucket]]\"]\n```\n",
         encoding="utf-8")
 
@@ -277,3 +281,49 @@ def test_obsidian_templates_carry_the_fields_the_tooling_reads(template):
     text = (PLUGIN_ROOT / "templates" / template).read_text(encoding="utf-8")
     assert "work_type:" in text, f"templates/{template} has no work_type"
     assert "status:" in text, f"templates/{template} has no status"
+
+
+# ------------------------------------------------ required fields per note type
+
+def test_doctor_flags_a_task_missing_its_epic(run_loop, vault, capsys):
+    """vault/SKILL.md's schema says every task links up to its epic. doctor
+    checked that a named epic *exists*, never that one was named at all."""
+    write_note(vault, "tasks/T-0001-x.md", type="task", id="T-0001",
+               status="todo", work_type="feature", title="orphan")
+
+    assert run_loop("doctor") == 1
+    assert "missing required field 'epic'" in capsys.readouterr().out
+
+
+def test_doctor_flags_an_adr_with_no_deciders(run_loop, vault, capsys):
+    """An ADR nobody is recorded as having decided is the failure mode the adr
+    skill warns about — a record of a preference, not a decision."""
+    write_note(vault, "decisions/ADR-0001-x.md", type="adr", id="ADR-0001",
+               status="accepted", title="token bucket")
+
+    assert run_loop("doctor") == 1
+    assert "missing required field 'deciders'" in capsys.readouterr().out
+
+
+def test_doctor_accepts_a_complete_task(run_loop, vault):
+    write_note(vault, "plan/EPIC-01-x.md", type="epic", id="EPIC-01",
+               status="todo", work_type="feature", title="epic")
+    write_note(vault, "tasks/T-0001-x.md", type="task", id="T-0001",
+               status="todo", work_type="feature", title="task", epic="EPIC-01")
+
+    assert run_loop("doctor") == 0
+
+
+def test_doctor_does_not_demand_fields_of_index_notes(run_loop, vault):
+    """context.md, glossary.md and the standards carry no id and no work_type
+    by design. The seeded vault must pass doctor untouched."""
+    assert run_loop("doctor") == 0
+
+
+def test_a_note_scaffolded_by_new_passes_doctor(run_loop, vault):
+    """The tooling must not generate notes its own validator rejects."""
+    for kind, title in [("epic", "Rate limiting"), ("adr", "Token bucket"),
+                        ("research", "Feasibility"), ("retro", "What we learned")]:
+        assert run_loop("new", kind, title) == 0
+
+    assert run_loop("doctor") == 0

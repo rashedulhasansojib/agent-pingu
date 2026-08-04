@@ -80,6 +80,10 @@ tests/            pytest suite over the vault tooling
 
 **IDs are allocated, not guessed.** Two agents eyeballing "the next number" pick the same one.
 
+**Read-only agents get a `tools:` allowlist; the two open-ended ones don't.** `architect` and the three reviewers deny by default, which is the honest shape for a role whose whole output is a report. `senior-engineer` and `sqa` stay on inheritance on purpose: an allowlist strips every MCP tool as well as built-ins, and those two work in someone else's repo where a project's MCP server may be exactly what they need.
+
+**Phases delegate to agents rather than forking.** A skill can run in its own subagent with `context: fork`, but a fork receives only the SKILL.md text — not the conversation, so not which task, which epic, or which run. Every phase here needs that. The `skills:` field on an agent is the shape that fits: the agent's body is the system prompt and the caller's handoff is the task.
+
 **No `hooks` field in `plugin.json`.** Claude Code auto-loads `hooks/hooks.json`; declaring it causes duplicate-load errors.
 
 **Setup is not autonomous.** Reading a repo tells you what the code does, never what the team agreed. Setup drafts the first from evidence, marks it as inferred, and asks about the second.
