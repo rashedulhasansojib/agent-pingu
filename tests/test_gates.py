@@ -1,6 +1,6 @@
 """Tests for `pingu gate`.
 
-`run/SKILL.md` claims "the gates are what make autonomy safe". Until now that
+`start/SKILL.md` claims "the gates are what make autonomy safe". Until now that
 was a markdown table nothing checked. These tests hold the runner to the two
 properties that make a gate worth having: it never claims a pass it did not
 verify, and it never runs a command nobody declared.
@@ -32,7 +32,7 @@ def statuses(result):
 # ------------------------------------------------------------------ declaration
 
 def test_every_phase_in_the_gate_table_has_a_declared_gate():
-    """The table in run/SKILL.md and GATES are the same list written twice."""
+    """The table in start/SKILL.md and GATES are the same list written twice."""
     assert set(pingu.GATES) == {
         "setup", "talk", "research", "adr", "plan",
         "diagnose", "execute", "verify", "retro",
@@ -292,7 +292,7 @@ def test_ready_stays_false_while_a_command_is_only_planned(ready_vault):
 # ------------------------------------------------------- what the docs promise
 
 def test_the_documented_split_of_checkable_versus_manual_still_holds():
-    """README, MANUAL and run/SKILL.md all state this breakdown in prose. It
+    """README, MANUAL and start/SKILL.md all state this breakdown in prose. It
     was stated wrong once already — written from the design note before the
     gates were built. If GATES changes, fix those three files too."""
     fully_checkable, partly_manual, entirely_manual = [], [], []

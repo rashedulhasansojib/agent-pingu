@@ -1,6 +1,6 @@
 ---
 name: talk
-description: Writes `docs/vault/brief.md` — problem, named users, success criteria, non-goals, constraints — through structured discovery. Dispatched by the `run` router as the discovery phase of the feature, refactor, bug and spike lanes; also use directly when someone asks for a brief by name, or when an existing brief needs revisiting because the goal moved. A loose request with nothing agreed yet belongs to `run` first — it picks the lane, and a chore or an incident should never reach this phase at all.
+description: Writes `docs/vault/brief.md` — problem, named users, success criteria, non-goals, constraints — through structured discovery. Dispatched by the `start` router as the discovery phase of the feature, refactor, bug and spike lanes; also use directly when someone asks for a brief by name, or when an existing brief needs revisiting because the goal moved. A loose request with nothing agreed yet belongs to `start` first — it picks the lane, and a chore or an incident should never reach this phase at all.
 ---
 
 # Talk

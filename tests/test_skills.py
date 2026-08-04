@@ -1,6 +1,6 @@
 """Tests for the skill definitions themselves.
 
-`run/SKILL.md` states the invariant "Only this skill sequences them. A phase
+`start/SKILL.md` states the invariant "Only this skill sequences them. A phase
 never invokes another phase." Nothing enforces that at runtime — dispatch is the
 model's judgement, driven by the `description` field. These tests guard the one
 lever that actually decides it.
@@ -20,7 +20,7 @@ PHASES = ["talk", "research", "adr", "plan", "diagnose", "execute", "verify", "r
 # Phrases that claim a raw, unscoped request. These belong to the router, which
 # has to pick the lane before any phase is the right one. This list is a
 # regression guard over the phrasings that were actually removed — it will not
-# catch a newly invented pushy phrase. The `run` mention above is the general
+# catch a newly invented pushy phrase. The `start` mention above is the general
 # check; treat this one as a reminder, not a safety net.
 ROUTER_TERRITORY = [
     r"whenever someone describes something they want built",
@@ -40,14 +40,14 @@ def description_of(skill):
 
 @pytest.mark.parametrize("skill", PHASES)
 def test_a_phase_points_raw_requests_at_the_router(skill):
-    """A phase description must name `run` so dispatch has somewhere to defer
+    """A phase description must name `start` so dispatch has somewhere to defer
     to. Without it, `talk` and `plan` compete with the router for the same
     request and the lane, run log, and SETUP NEEDED gate are all skipped."""
-    # Backticked, deliberately. The router is called `run`, and asserting on a
-    # bare "run" would pass on "run log", "a full-loop run", or "running" — the
-    # check would look green while meaning nothing.
-    assert "`run`" in description_of(skill), (
-        f"{skill}'s description never defers to the `run` router")
+    # Backticked, deliberately. The router is called `start`, and asserting on a
+    # bare "start" would pass on "starts a run log", "start building", or
+    # "starting a new project" — the check would look green while meaning nothing.
+    assert "`start`" in description_of(skill), (
+        f"{skill}'s description never defers to the `start` router")
 
 
 @pytest.mark.parametrize("skill", PHASES)
@@ -59,8 +59,8 @@ def test_a_phase_does_not_claim_an_unscoped_request(skill):
 
 
 def test_the_router_still_claims_everything_else():
-    """Narrowing the phases only works if `run` remains the catch-all."""
-    description = description_of("run").lower()
+    """Narrowing the phases only works if `start` remains the catch-all."""
+    description = description_of("start").lower()
     assert "build, fix, ship, refactor, investigate, or add anything" in description
 
 
@@ -106,18 +106,18 @@ def test_frontmatter_has_no_unquoted_colon_space(path):
 # ------------------------------------------------------------------ lane table
 
 def lane_table():
-    """The lane table from run/SKILL.md, as {lane: (phases, optional)}.
+    """The lane table from start/SKILL.md, as {lane: (phases, optional)}.
 
     Mirrors the parse ccw's check-skills-index.mjs does over its own index:
     read the human-facing document, and diff it against the machine-readable
     structure the tooling actually runs on.
     """
-    text = (PLUGIN_ROOT / "skills" / "run" / "SKILL.md").read_text(encoding="utf-8")
+    text = (PLUGIN_ROOT / "skills" / "start" / "SKILL.md").read_text(encoding="utf-8")
     # Scope to the "Pick the lane" section. The agents table further down has
     # the same row shape (`| \`architect\` | ... |`) and would otherwise be
     # parsed as lanes named after agents.
     section = re.search(r"^## Pick the lane$(.*?)^## ", text, re.MULTILINE | re.DOTALL)
-    assert section, "run/SKILL.md no longer has a '## Pick the lane' section"
+    assert section, "start/SKILL.md no longer has a '## Pick the lane' section"
     lanes = {}
     for row in re.finditer(r"^\|\s*`(\w+)`\s*\|([^|]+)\|", section.group(1), re.MULTILINE):
         lane, cell = row.group(1), row.group(2)
@@ -144,7 +144,7 @@ def test_the_lane_table_is_parseable_at_all():
 
 @pytest.mark.parametrize("lane", ["feature", "bug", "incident", "refactor", "spike", "chore"])
 def test_lane_phases_match_the_code(lane):
-    """`run/SKILL.md`'s table and `LANES` in pingu.py are the same state machine
+    """`start/SKILL.md`'s table and `LANES` in pingu.py are the same state machine
     written twice. Order matters — it is what infer_phase walks."""
     import pingu as pingu_py
 
@@ -233,10 +233,10 @@ def test_the_blind_reviewers_preload_nothing(name):
 # ------------------------------------------------------------------ gate table
 
 def gate_table():
-    """The phases listed in run/SKILL.md's gate table, in order."""
-    text = (PLUGIN_ROOT / "skills" / "run" / "SKILL.md").read_text(encoding="utf-8")
+    """The phases listed in start/SKILL.md's gate table, in order."""
+    text = (PLUGIN_ROOT / "skills" / "start" / "SKILL.md").read_text(encoding="utf-8")
     section = re.search(r"^## Gates$(.*?)^## ", text, re.MULTILINE | re.DOTALL)
-    assert section, "run/SKILL.md no longer has a '## Gates' section"
+    assert section, "start/SKILL.md no longer has a '## Gates' section"
     rows = re.findall(r"^\|\s*(\w[\w-]*)\s*\|", section.group(1), re.MULTILINE)
     return [r for r in rows if r != "Phase"]
 
@@ -257,7 +257,7 @@ def test_every_documented_gate_is_declared_in_code():
 def test_the_skill_points_at_the_runner_rather_than_asking_for_self_assessment():
     """The gate section used to instruct the model to decide whether its own
     gate was met. It has to name the command instead."""
-    text = (PLUGIN_ROOT / "skills" / "run" / "SKILL.md").read_text(encoding="utf-8")
+    text = (PLUGIN_ROOT / "skills" / "start" / "SKILL.md").read_text(encoding="utf-8")
     section = re.search(r"^## Gates$(.*?)^## ", text, re.MULTILINE | re.DOTALL).group(1)
 
     assert "pingu gate" in section

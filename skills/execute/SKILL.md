@@ -1,6 +1,6 @@
 ---
 name: execute
-description: Implements one already-planned task end to end — reads its task note and linked ADRs, writes tests and code, keeps the vault and GitHub Issue in step, and stops cleanly when blocked. Dispatched by the `run` router as the execution phase; also use directly when someone names a task by ID ("implement T-0042") or resumes a half-finished one from a previous session. Requires a task note with acceptance criteria — a request to start building with no plan behind it goes to `run`.
+description: Implements one already-planned task end to end — reads its task note and linked ADRs, writes tests and code, keeps the vault and GitHub Issue in step, and stops cleanly when blocked. Dispatched by the `start` router as the execution phase; also use directly when someone names a task by ID ("implement T-0042") or resumes a half-finished one from a previous session. Requires a task note with acceptance criteria — a request to start building with no plan behind it goes to `start`.
 ---
 
 # Execute

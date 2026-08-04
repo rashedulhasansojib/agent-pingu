@@ -32,7 +32,7 @@ def test_status_honours_a_valid_blocked_cap(run_pingu, ready_vault, capsys):
 # ------------------------------------------------------------------ lane inference
 
 def test_chore_lane_starts_at_execute(ready_vault):
-    """run/SKILL.md: chore is `execute -> verify`. It has no talk phase."""
+    """start/SKILL.md: chore is `execute -> verify`. It has no talk phase."""
     write_note(ready_vault, "tasks/T-0001-bump.md", type="task", id="T-0001",
                status="todo", work_type="chore", title="bump deps")
 
@@ -41,7 +41,7 @@ def test_chore_lane_starts_at_execute(ready_vault):
 
 
 def test_incident_lane_starts_at_diagnose_not_talk(ready_vault):
-    """run/SKILL.md: incident is `diagnose -> execute -> verify -> retro`."""
+    """start/SKILL.md: incident is `diagnose -> execute -> verify -> retro`."""
     write_note(ready_vault, "research/R-0001-outage.md", type="research", id="R-0001",
                status="todo", work_type="incident", title="api down")
 
@@ -50,7 +50,7 @@ def test_incident_lane_starts_at_diagnose_not_talk(ready_vault):
 
 
 def test_bug_lane_closes_without_demanding_a_retro(ready_vault):
-    """run/SKILL.md: bug is `talk -> diagnose -> execute -> verify`. No retro."""
+    """start/SKILL.md: bug is `talk -> diagnose -> execute -> verify`. No retro."""
     write_note(ready_vault, "tasks/T-0001-dupes.md", type="task", id="T-0001",
                status="done", work_type="bug", title="dupes for tenant B")
 
@@ -78,7 +78,7 @@ def test_feature_lane_with_adr_skipped_advances_to_plan(ready_vault):
 
 
 def test_spike_lane_goes_to_research_then_retro(ready_vault):
-    """run/SKILL.md: spike is `talk -> research -> retro`, no production code."""
+    """start/SKILL.md: spike is `talk -> research -> retro`, no production code."""
     write_note(ready_vault, "brief.md", type="brief", id="BRIEF-001",
                status="locked", work_type="spike", title="can we even do X")
 

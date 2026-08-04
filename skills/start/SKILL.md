@@ -1,9 +1,9 @@
 ---
-name: run
+name: start
 description: The orchestrator for all development work in a vault-backed repo — picks the right lane for the job (feature, bug, refactor, spike, incident, chore), drives it through its phases, and delegates to the specialist agents. Use whenever someone asks to build, fix, ship, refactor, investigate, or add anything; when they say "let's start on X", "continue", "where are we", or "what's next"; and whenever a request arrives with no plan behind it. Also use to resume after a break or to diagnose a halted run. If a request would otherwise send you straight to writing code, come here first.
 ---
 
-# Run
+# Start
 
 You are running an engineering loop whose state lives in the vault, not in this conversation. Read the `vault` skill before touching any note.
 

@@ -1,6 +1,6 @@
 ---
 name: retro
-description: Closes a run by capturing what was learned and writing the durable parts back into `standards/`, `patterns/`, and `glossary.md` so the next run starts smarter. Dispatched by the `run` router as the closing phase, and required rather than optional on the incident lane; also use directly after a painful debugging session, or when a solution shape has now worked three times and deserves writing down.
+description: Closes a run by capturing what was learned and writing the durable parts back into `standards/`, `patterns/`, and `glossary.md` so the next run starts smarter. Dispatched by the `start` router as the closing phase, and required rather than optional on the incident lane; also use directly after a painful debugging session, or when a solution shape has now worked three times and deserves writing down.
 ---
 
 # Retro
