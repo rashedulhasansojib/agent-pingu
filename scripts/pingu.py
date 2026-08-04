@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Vault tooling for Agent Pingu.
 
-Invoked as `loop <command>` — bin/loop puts this on the Bash tool's PATH.
+Invoked as `pingu <command>` — bin/pingu puts this on the Bash tool's PATH.
 
-  loop status              current lane and phase, blockers, unsynced tasks
-  loop next-id <type>      allocate the next free ID (task|adr|epic|research|retro)
-  loop new <type> <title>  scaffold a note with correct frontmatter, print its path
-  loop doctor              validate the vault: duplicate IDs, bad status,
+  pingu status              current lane and phase, blockers, unsynced tasks
+  pingu next-id <type>      allocate the next free ID (task|adr|epic|research|retro)
+  pingu new <type> <title>  scaffold a note with correct frontmatter, print its path
+  pingu doctor              validate the vault: duplicate IDs, bad status,
                            broken wikilinks, orphaned tasks, missing fields
-  loop gate [<phase>]      evaluate a phase's exit condition. Plans by default;
+  pingu gate [<phase>]      evaluate a phase's exit condition. Plans by default;
                            --execute runs the commands context.md declares.
                            Defaults to the phase status infers.
 
@@ -16,7 +16,7 @@ Config, read from the environment:
   CLAUDE_PROJECT_DIR              repo root. Exported to hook processes only, so
                                   this falls back to `git rev-parse --show-toplevel`
   CLAUDE_PLUGIN_OPTION_VAULT_DIR  vault path relative to the repo, defaults to docs/vault
-  LOOP_STATE_MAX_BLOCKED          cap on blocked lines printed by status (default 5)
+  PINGU_STATE_MAX_BLOCKED          cap on blocked lines printed by status (default 5)
 
 No third-party dependencies, so it runs wherever Python 3 does. The tests need
 pytest; the tooling itself does not.
@@ -60,7 +60,7 @@ ADR_STATUS = {"proposed", "accepted", "superseded"}
 NOTE_STATUS = {"draft", "locked", "blocked", "done", "deferred", "template", "ready"}
 
 # lane -> the phases it runs, in order. This mirrors the lane table in
-# skills/loop/SKILL.md; change one and change the other.
+# skills/pingu/SKILL.md; change one and change the other.
 LANES = {
     "feature": ("talk", "research", "adr", "plan", "execute", "verify", "retro"),
     "bug": ("talk", "diagnose", "execute", "verify"),
@@ -282,8 +282,8 @@ def infer_phase(notes, lane=None):
 
 def cmd_status(vault):
     if not vault.is_dir():
-        print(f"[loop] no vault at {vault}")
-        print("[loop] phase: talk — run vault-init to start")
+        print(f"[pingu] no vault at {vault}")
+        print("[pingu] phase: talk — run vault-init to start")
         return 0
 
     notes = load_notes(vault)
@@ -293,39 +293,39 @@ def cmd_status(vault):
         phase, why = "setup", "vault seeded but not filled in"
     else:
         phase, why = infer_phase(notes, lane)
-    print(f"[loop] vault: {vault.name}   lane: {lane}   phase: {phase}   ({why})")
+    print(f"[pingu] vault: {vault.name}   lane: {lane}   phase: {phase}   ({why})")
 
     if todo:
         names = ", ".join(sorted(n["path"].name for n in todo))
-        print(f"[loop] SETUP NEEDED — still templates: {names}")
-        print("[loop] every phase loads these; run the setup skill to draft them from this repo")
+        print(f"[pingu] SETUP NEEDED — still templates: {names}")
+        print("[pingu] every phase loads these; run the setup skill to draft them from this repo")
 
     tasks = [n for n in notes if n["type"] == "task"]
     if tasks:
         counts = {}
         for t in tasks:
             counts[t.get("status") or "unknown"] = counts.get(t.get("status") or "unknown", 0) + 1
-        print("[loop] tasks: " + "  ".join(f"{k}:{v}" for k, v in sorted(counts.items())))
+        print("[pingu] tasks: " + "  ".join(f"{k}:{v}" for k, v in sorted(counts.items())))
 
     # Everything printed here is injected into every session's context, so an
     # unbounded list would quietly tax the whole run. A junk value falls back to
     # the default rather than raising: this runs in the SessionStart hook, where
     # an exception costs the user their whole session over a cosmetic setting.
     try:
-        cap = int(os.environ.get("LOOP_STATE_MAX_BLOCKED", "5"))
+        cap = int(os.environ.get("PINGU_STATE_MAX_BLOCKED", "5"))
     except ValueError:
         cap = 5
     blocked = [t for t in tasks if t.get("status") == "blocked"]
     for t in blocked[:cap]:
-        print(f"[loop] BLOCKED {t.get('id')} {t.get('title')}")
+        print(f"[pingu] BLOCKED {t.get('id')} {t.get('title')}")
     if len(blocked) > cap:
-        print(f"[loop] ...and {len(blocked) - cap} more blocked")
+        print(f"[pingu] ...and {len(blocked) - cap} more blocked")
 
     unsynced = [t for t in tasks if not t.get("gh_issue") and t.get("status") != "done"]
     if unsynced:
         ids = ", ".join(str(t.get("id")) for t in unsynced[:8])
         more = f" (+{len(unsynced) - 8} more)" if len(unsynced) > 8 else ""
-        print(f"[loop] not mirrored to GitHub: {ids}{more}")
+        print(f"[pingu] not mirrored to GitHub: {ids}{more}")
     return 0
 
 
@@ -550,7 +550,7 @@ def _gate_retro(notes, vault):
     return True, "a retro note exists"
 
 
-# Mirrors the gate table in skills/loop/SKILL.md. tests/test_skills.py holds the
+# Mirrors the gate table in skills/pingu/SKILL.md. tests/test_skills.py holds the
 # two in step, the same way it does for LANES.
 GATES = {
     "setup": (
@@ -735,12 +735,12 @@ def main(argv):
         return cmd_doctor(vault)
     if cmd == "next-id":
         if len(argv) < 3 or argv[2] not in TYPES:
-            print(f"usage: loop.py next-id <{'|'.join(TYPES)}>", file=sys.stderr)
+            print(f"usage: pingu.py next-id <{'|'.join(TYPES)}>", file=sys.stderr)
             return 1
         return cmd_next_id(vault, argv[2])
     if cmd == "new":
         if len(argv) < 4 or argv[2] not in TYPES:
-            print(f"usage: loop.py new <{'|'.join(TYPES)}> <title>", file=sys.stderr)
+            print(f"usage: pingu.py new <{'|'.join(TYPES)}> <title>", file=sys.stderr)
             return 1
         return cmd_new(vault, argv[2], " ".join(argv[3:]))
 

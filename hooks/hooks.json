@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/loop.py status"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/pingu.py status"
           }
         ]
       }

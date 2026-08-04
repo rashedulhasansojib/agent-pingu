@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-# Entry point for GitHub Issue mirroring. See bin/loop for why this exists.
+# Entry point for GitHub Issue mirroring. See bin/pingu for why this exists.
 set -euo pipefail
 exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/gh_sync.py" "$@"

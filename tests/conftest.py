@@ -49,14 +49,14 @@ def ready_vault(vault):
 
 
 @pytest.fixture
-def run_loop(repo, monkeypatch):
-    """Invoke loop.py in-process against this repo, capturing stdout."""
-    import loop
+def run_pingu(repo, monkeypatch):
+    """Invoke pingu.py in-process against this repo, capturing stdout."""
+    import pingu
 
     def _run(*argv, **env):
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
         for key, value in env.items():
             monkeypatch.setenv(key, value)
-        return loop.main(["loop.py", *argv])
+        return pingu.main(["pingu.py", *argv])
 
     return _run

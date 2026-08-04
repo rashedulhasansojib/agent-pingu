@@ -48,7 +48,7 @@ When someone doesn't know, write the open question into the file rather than fil
 
 ## Write
 
-Fill in the seeded files in place, keeping their headings so the structure stays predictable. Change `status: template` to `status: ready` on each one as you complete it — that flag is what stops the loop nagging about setup, and what `loop status` reads.
+Fill in the seeded files in place, keeping their headings so the structure stays predictable. Change `status: template` to `status: ready` on each one as you complete it — that flag is what stops the loop nagging about setup, and what `pingu status` reads.
 
 Mark inferred items so a reader can tell evidence from agreement:
 
@@ -70,12 +70,12 @@ test_command: ["pytest", "-q"]
 lint_command: ["ruff", "check", "."]
 ```
 
-You already found these while reading the test config and CI. This is the same fact in a form a script can use: `loop gate verify` runs `test_command`, and with the field empty it reports `not-declared` rather than passing. Lists, never strings — a list cannot reach a shell.
+You already found these while reading the test config and CI. This is the same fact in a form a script can use: `pingu gate verify` runs `test_command`, and with the field empty it reports `not-declared` rather than passing. Lists, never strings — a list cannot reach a shell.
 
 Prefer the command CI runs over the one the README suggests. If they differ, that is worth mentioning to the person: one of the two is stale.
 
 ## Finish
 
-Run `loop doctor`, then show the person what you wrote — the standards file especially, since it will shape every future run. Ask them to correct anything you inferred wrongly. Getting one rule wrong here propagates into everything the loop produces afterwards, so this review is worth the interruption.
+Run `pingu doctor`, then show the person what you wrote — the standards file especially, since it will shape every future run. Ask them to correct anything you inferred wrongly. Getting one rule wrong here propagates into everything the loop produces afterwards, so this review is worth the interruption.
 
 Then say what the loop is now ready to do, and let them start the real work.

@@ -49,7 +49,7 @@ Stack, runtime, where it deploys. Two or three lines.
 The commands to install, test, and start locally. Agents will use these.
 
 Put the test and lint commands in this note's frontmatter as well, as JSON
-lists: \`test_command: ["pytest", "-q"]\`. That is what \`loop gate verify\`
+lists: \`test_command: ["pytest", "-q"]\`. That is what \`pingu gate verify\`
 runs. A list, not a string — it never goes near a shell.
 
 ## Landmines

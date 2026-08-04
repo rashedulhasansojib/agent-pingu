@@ -69,11 +69,11 @@ updated: 2026-08-03
 ---
 ```
 
-Run `loop doctor` after any batch of note writing. It catches duplicate IDs, unknown statuses, broken wikilinks, and tasks orphaned from their epic — the failures that quietly break the board.
+Run `pingu doctor` after any batch of note writing. It catches duplicate IDs, unknown statuses, broken wikilinks, and tasks orphaned from their epic — the failures that quietly break the board.
 
 ## Naming, IDs, and linking
 
-- Allocate IDs with `loop next-id <type>`. Never guess the next number by eye. Two agents working in parallel will both guess the same one.
+- Allocate IDs with `pingu next-id <type>`. Never guess the next number by eye. Two agents working in parallel will both guess the same one.
 - IDs are zero-padded and monotonic per type: `ADR-0007`, `T-0042`, `EPIC-03`.
 - Filenames are `<ID>-<kebab-slug>.md`. The ID prefix keeps links stable when titles change.
 - Link with wikilinks, always: `[[ADR-0003-token-bucket]]`. Never paste content from another note — link to it. Duplicated context is context that will drift.

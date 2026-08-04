@@ -80,10 +80,10 @@ def test_read_field_strips_quotes_and_treats_null_as_absent():
 # --------------------------------------------------------- cross-script agreement
 
 def test_a_task_scaffolded_by_loop_py_pushes_without_a_junk_epic_label(repo, vault, fake_gh, monkeypatch):
-    """loop.py new task writes an empty `epic:`. gh_sync must not turn that into
+    """pingu.py new task writes an empty `epic:`. gh_sync must not turn that into
     a label named after the next line of frontmatter."""
     subprocess.run(
-        [sys.executable, str(PLUGIN_ROOT / "scripts" / "loop.py"), "new", "task", "Token bucket"],
+        [sys.executable, str(PLUGIN_ROOT / "scripts" / "pingu.py"), "new", "task", "Token bucket"],
         cwd=repo, check=True, capture_output=True,
         env={"CLAUDE_PROJECT_DIR": str(repo), "PATH": "/usr/bin:/bin"},
     )
@@ -93,7 +93,7 @@ def test_a_task_scaffolded_by_loop_py_pushes_without_a_junk_epic_label(repo, vau
     gh_sync.cmd_push(vault)
 
     labels = [a[i + 1] for a in fake_gh.calls for i, x in enumerate(a) if x == "--label"]
-    assert labels == ["loop:todo"]
+    assert labels == ["pingu:todo"]
 
 
 def test_push_writes_the_issue_number_back_into_the_note(vault, fake_gh):
@@ -118,14 +118,14 @@ def test_push_skips_a_task_that_is_already_mirrored(vault, fake_gh):
 # ------------------------------------------------------------------- vault location
 
 def test_gh_sync_and_loop_agree_on_a_configured_vault_dir(repo, monkeypatch):
-    """loop.py honours vault_dir; gh_sync.py must read the same vault or it
+    """pingu.py honours vault_dir; gh_sync.py must read the same vault or it
     pushes tasks from a directory the rest of the loop abandoned."""
-    import loop
+    import pingu
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
     monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_VAULT_DIR", "docs/knowledge")
 
-    assert gh_sync.vault_path() == loop.vault_path()
+    assert gh_sync.vault_path() == pingu.vault_path()
 
 
 # --------------------------------------------------------------- honest reporting

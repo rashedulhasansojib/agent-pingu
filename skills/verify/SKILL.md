@@ -1,6 +1,6 @@
 ---
 name: verify
-description: The quality gate before a human sees the work — runs the full suite, reviews the diff against the brief, the plan, the ADRs and the standards using four independent reviewers, and assembles the one-page review packet and the PR. Dispatched by the `loop` router as the verification phase; also use directly when someone asks whether specific finished work is ready to ship, or to audit whether what was built matches what was asked for. Needs implemented tasks to verify against.
+description: The quality gate before a human sees the work — runs the full suite, reviews the diff against the brief, the plan, the ADRs and the standards using four independent reviewers, and assembles the one-page review packet and the PR. Dispatched by the `pingu` router as the verification phase; also use directly when someone asks whether specific finished work is ready to ship, or to audit whether what was built matches what was asked for. Needs implemented tasks to verify against.
 ---
 
 # Verify
@@ -35,7 +35,7 @@ Fix blocking findings before finishing. Turn should-fix items into new task note
 
 ## Output
 
-The review packet at `docs/vault/review/<date>-<slug>.md`, per the format in the `loop` skill. Then the PR, with the packet as its body and every task's Issue referenced so they close on merge.
+The review packet at `docs/vault/review/<date>-<slug>.md`, per the format in the `pingu` skill. Then the PR, with the packet as its body and every task's Issue referenced so they close on merge.
 
 ## Honesty
 

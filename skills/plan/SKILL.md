@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Decomposes an existing brief and its accepted ADRs into epics and individually executable task notes with acceptance criteria, then mirrors them to GitHub Issues. Dispatched by the `loop` router as the planning phase; also use directly to re-cut a plan when execution proved the tasks were wrong, or when someone points at a written brief and asks for it to be sliced. Requires that brief — an undifferentiated request with nothing decided yet goes to `loop`, which runs discovery first.
+description: Decomposes an existing brief and its accepted ADRs into epics and individually executable task notes with acceptance criteria, then mirrors them to GitHub Issues. Dispatched by the `pingu` router as the planning phase; also use directly to re-cut a plan when execution proved the tasks were wrong, or when someone points at a written brief and asks for it to be sliced. Requires that brief — an undifferentiated request with nothing decided yet goes to `pingu`, which runs discovery first.
 ---
 
 # Plan
@@ -54,7 +54,7 @@ The slice of the brief this delivers.
 Observable condition for the whole epic.
 ```
 
-Then a file per task, with IDs allocated by `loop next-id task` rather than guessed:
+Then a file per task, with IDs allocated by `pingu next-id task` rather than guessed:
 
 ```markdown
 ---

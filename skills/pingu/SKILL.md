@@ -1,9 +1,9 @@
 ---
-name: loop
+name: pingu
 description: The orchestrator for all development work in a vault-backed repo — picks the right lane for the job (feature, bug, refactor, spike, incident, chore), drives it through its phases, and delegates to the specialist agents. Use whenever someone asks to build, fix, ship, refactor, investigate, or add anything; when they say "let's start on X", "continue", "where are we", or "what's next"; and whenever a request arrives with no plan behind it. Also use to resume after a break or to diagnose a halted run. If a request would otherwise send you straight to writing code, come here first.
 ---
 
-# Loop
+# Pingu
 
 You are running an engineering loop whose state lives in the vault, not in this conversation. Read the `vault` skill before touching any note.
 
@@ -13,7 +13,7 @@ Autonomy for this install is `${user_config.autonomy}`. On `full-loop` you run e
 
 At the start of any run:
 
-1. Run `loop status` for the current phase, blockers, and unsynced tasks.
+1. Run `pingu status` for the current phase, blockers, and unsynced tasks.
 2. Read `context.md` and, if one exists, the most recent run log.
 3. Say in one line where things stand and what you are about to do. Then do it — on `full-loop` do not ask permission to continue.
 
@@ -42,7 +42,7 @@ Not all work is a feature. Choosing the wrong lane is the most common way this l
 
 Phases marked `?` are skippable when the work is genuinely routine. Skipping is a decision: record it in the run log with a reason. Silent skipping is how a loop degrades into vibe coding over a few weeks.
 
-Set `work_type` in the frontmatter of everything you create. This is not bookkeeping: `loop status` reads the most recently updated note that carries one to decide which lane it is reporting against, so an unset `work_type` makes a chore look like a stalled feature to the next session. The lane table above is mirrored in `LANES` in `scripts/loop.py` — change one and change the other.
+Set `work_type` in the frontmatter of everything you create. This is not bookkeeping: `pingu status` reads the most recently updated note that carries one to decide which lane it is reporting against, so an unset `work_type` makes a chore look like a stalled feature to the next session. The lane table above is mirrored in `LANES` in `scripts/pingu.py` — change one and change the other.
 
 Backedges are normal and cheap. Discovering mid-execution that the plan was wrong is the loop working, not failing. Go back, amend the note, come forward again.
 
@@ -77,13 +77,13 @@ Call `security-reviewer` without being asked whenever a change touches authentic
 
 Each phase has an exit condition. A phase that has not met its gate does not advance, even under full autonomy — the gates are what make autonomy safe.
 
-Run `loop gate <phase>` at the end of every phase. Do not assess your own gate; that is the thing this command exists to replace. It plans by default and runs the vault's declared commands with `--execute`, reporting each check as one of:
+Run `pingu gate <phase>` at the end of every phase. Do not assess your own gate; that is the thing this command exists to replace. It plans by default and runs the vault's declared commands with `--execute`, reporting each check as one of:
 
 - `passed` / `failed` — checked. A `failed` means the phase does not advance. Fix it or write a `blocked` note.
 - `not-declared` — a command gate whose command the vault never declared. Not a pass. `verify` needs `test_command` in `context.md`'s frontmatter; if it is missing, say so rather than skipping the check.
 - `manual-review` — no tool can decide this one. State plainly what you did and what the human still has to confirm. Never report it as met.
 
-`loop gate` with no phase gates whatever `loop status` currently infers.
+`pingu gate` with no phase gates whatever `pingu status` currently infers.
 
 The command is honest rather than reassuring: on most phases it will end with checks still outstanding. That is the correct answer, not a shortfall. Only `talk`, `research` and `plan` can be settled entirely by tooling; `adr` and `diagnose` are pure human judgement, and the remaining four are part-checked with a manual component you have to speak to.
 
@@ -134,6 +134,6 @@ One page. The point is that the human reviews one page instead of forty notes.
 
 ## Working style
 
-Work on a branch named `loop/<id>-<slug>`. One pull request at the end, its body generated from the review packet. Mirror tasks to GitHub Issues as you create them (`gh-sync push`) so the team sees work appear in the tracker they already watch, without anyone opening Obsidian.
+Work on a branch named `pingu/<id>-<slug>`. One pull request at the end, its body generated from the review packet. Mirror tasks to GitHub Issues as you create them (`gh-sync push`) so the team sees work appear in the tracker they already watch, without anyone opening Obsidian.
 
 `push` refuses on a public repo, because it mirrors whole note bodies. If it does, stop and ask — do not pass `--public-ok` on the user's behalf, and do not route around it by pasting note contents in by hand. Whether this project's internal context gets published is theirs to decide, and this is exactly the kind of guard a full-autonomy run exists to respect rather than improvise past.

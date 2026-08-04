@@ -1,6 +1,6 @@
 ---
 name: diagnose
-description: Takes a symptom to a proven root cause — reproduce, minimise, hypothesise, instrument, then capture it as a failing test — and records the findings in the task note or `research/R-NNNN`. Dispatched by the `loop` router as the diagnosis phase of the bug and incident lanes; also use directly for a named failing test, a flaky test, a performance regression, or a fix that was attempted and did not hold. A fresh report that something is broken goes to `loop`, which decides between the bug and incident lanes and starts a run log.
+description: Takes a symptom to a proven root cause — reproduce, minimise, hypothesise, instrument, then capture it as a failing test — and records the findings in the task note or `research/R-NNNN`. Dispatched by the `pingu` router as the diagnosis phase of the bug and incident lanes; also use directly for a named failing test, a flaky test, a performance regression, or a fix that was attempted and did not hold. A fresh report that something is broken goes to `pingu`, which decides between the bug and incident lanes and starts a run log.
 ---
 
 # Diagnose

@@ -37,13 +37,13 @@ The loop picks one from the request rather than forcing everything through a fea
 
 ## Gates
 
-Every phase has an exit condition. `loop gate <phase>` evaluates it, so the model
+Every phase has an exit condition. `pingu gate <phase>` evaluates it, so the model
 isn't asked whether it met its own gate — the one party that can't answer that.
 
 ```bash
-loop gate                     # gate whatever phase `loop status` infers
-loop gate verify              # show what would run
-loop gate verify --execute    # actually run the declared commands
+pingu gate                     # gate whatever phase `pingu status` infers
+pingu gate verify              # show what would run
+pingu gate verify --execute    # actually run the declared commands
 ```
 
 Each check comes back as one of five verdicts, and the last two are the reason
@@ -91,7 +91,7 @@ is rejected with a message telling you to use a list.
 
 ```
 skills/
-  loop            router — picks the lane, sequences phases, delegates
+  pingu           router — picks the lane, sequences phases, delegates
   vault           spine: layout, schema, IDs, context resolution
   setup           drafts standards and context by reading the repo
   talk            discovery → brief.md
@@ -110,21 +110,21 @@ agents/
   reviewer-standards  reviewer-spec
 
 bin/              on the Bash tool's PATH, so skills call these by name
-  loop           status | doctor | gate | next-id | new
+  pingu          status | doctor | gate | next-id | new
   gh-sync        push | status | pull
   vault-init     scaffolds docs/vault/
 
 scripts/          the implementations behind bin/
-  loop.py  gh_sync.py  vault_init.sh
+  pingu.py  gh_sync.py  vault_init.sh
 
 tests/            pytest suite over the vault tooling
 ```
 
 ## Design decisions worth knowing
 
-**Phases versus disciplines.** Phases own artifacts and only `loop` sequences them; disciplines own techniques and anyone can call them. Orchestrators calling orchestrators nest unpredictably, and a run you can't follow is a run you can't review.
+**Phases versus disciplines.** Phases own artifacts and only `pingu` sequences them; disciplines own techniques and anyone can call them. Orchestrators calling orchestrators nest unpredictably, and a run you can't follow is a run you can't review.
 
-**Only the router claims a raw request.** That invariant lives entirely in the `description` fields, because dispatch is a judgement call and nothing arbitrates it at runtime. So each phase description names the artifact it owns and the precondition it needs, and points anything vaguer at `loop`. When `talk` or `plan` wins a request the router should have taken, the run gets no lane, no run log, and — the expensive one — no `SETUP NEEDED` gate. `tests/test_skills.py` guards this; it is the only thing that does.
+**Only the router claims a raw request.** That invariant lives entirely in the `description` fields, because dispatch is a judgement call and nothing arbitrates it at runtime. So each phase description names the artifact it owns and the precondition it needs, and points anything vaguer at `pingu`. When `talk` or `plan` wins a request the router should have taken, the run gets no lane, no run log, and — the expensive one — no `SETUP NEEDED` gate. `tests/test_skills.py` guards this; it is the only thing that does.
 
 **Two reviewers, deliberately blind to each other.** A reviewer holding the spec excuses sloppy code because it works; a reviewer holding the standards nitpicks code that solves the wrong problem. Be clear-eyed about how far this goes: `reviewer-standards` is *asked* not to read the brief, and it has `Read`, so the separation is a convention its prompt maintains, not a sandbox. It holds because the agent has no reason to defect, not because it can't.
 
@@ -132,7 +132,7 @@ tests/            pytest suite over the vault tooling
 
 **IDs are allocated, not guessed.** Two agents eyeballing "the next number" pick the same one.
 
-**Gates are executed, not self-assessed.** The gate table used to be prose asking the model to confirm it had met its own exit condition, which is the one party that cannot be trusted to answer. `loop gate <phase>` runs the checks. Crucially it has a `manual-review` verdict for the checks no tool can decide — because forcing every gate into something checkable is how a green tick stops meaning anything. `not-declared` exists for the same reason: an undeclared test command is not a passing one.
+**Gates are executed, not self-assessed.** The gate table used to be prose asking the model to confirm it had met its own exit condition, which is the one party that cannot be trusted to answer. `pingu gate <phase>` runs the checks. Crucially it has a `manual-review` verdict for the checks no tool can decide — because forcing every gate into something checkable is how a green tick stops meaning anything. `not-declared` exists for the same reason: an undeclared test command is not a passing one.
 
 **Declared commands are lists.** `test_command: ["pytest", "-q"]` in `context.md` goes straight to the process. A string would need a shell to interpret, and the vault is a file the model writes.
 
@@ -160,10 +160,10 @@ before. `gh` is the only thing stubbed.
 
 ## Extending
 
-Add a phase: drop a folder in `skills/`, add it to the lane table in `skills/loop/SKILL.md` **and to `LANES` in `scripts/loop.py`**, add its gate to the gate table **and to `GATES`**, and add its note type to the schema in `skills/vault/SKILL.md`. `tests/test_skills.py` fails if any of those pairs drift apart, which is the point of it.
+Add a phase: drop a folder in `skills/`, add it to the lane table in `skills/pingu/SKILL.md` **and to `LANES` in `scripts/pingu.py`**, add its gate to the gate table **and to `GATES`**, and add its note type to the schema in `skills/vault/SKILL.md`. `tests/test_skills.py` fails if any of those pairs drift apart, which is the point of it.
 
 When you write the gate, reach for a `manual` check rather than approximating one. A gate that pretends to check something it can't is worse than one that says a human has to look.
 
-Write the description to name the artifact it owns and the precondition it needs, then defer anything vaguer to `loop`. The instinct is to write it pushy, because a single skill in isolation does tend to under-trigger — but every phase you make pushier competes with the router for the same request, and the router is the one that picks the lane and checks the setup gate. Pushiness belongs in `loop` alone.
+Write the description to name the artifact it owns and the precondition it needs, then defer anything vaguer to `pingu`. The instinct is to write it pushy, because a single skill in isolation does tend to under-trigger — but every phase you make pushier competes with the router for the same request, and the router is the one that picks the lane and checks the setup gate. Pushiness belongs in `pingu` alone.
 
 Keep each `SKILL.md` under ~500 lines and push detail into `references/`, which loads only when needed.

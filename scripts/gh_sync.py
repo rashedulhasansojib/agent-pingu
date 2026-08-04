@@ -25,17 +25,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-# One definition of where the vault is, shared with loop.py. Two scripts each
+# One definition of where the vault is, shared with pingu.py. Two scripts each
 # resolving it their own way is how `vault_dir` ends up half-implemented.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from loop import vault_path  # noqa: E402
+from pingu import vault_path  # noqa: E402
 
 STATUS_LABELS = {
-    "todo": "loop:todo",
-    "doing": "loop:doing",
-    "blocked": "loop:blocked",
-    "review": "loop:review",
-    "done": "loop:done",
+    "todo": "pingu:todo",
+    "doing": "pingu:doing",
+    "blocked": "pingu:blocked",
+    "review": "pingu:review",
+    "done": "pingu:done",
 }
 
 

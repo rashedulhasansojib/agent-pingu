@@ -1,6 +1,6 @@
 ---
 name: research
-description: Answers open questions an existing brief, plan, or task already raised — spikes, prior-art digs, library and vendor comparisons, feasibility checks, reading the codebase — and writes `research/R-NNNN`. Dispatched by the `loop` router as the research phase of the feature and spike lanes; also use directly when a specific question must be settled before an ADR can be written, or when a task turns out to rest on an assumption nobody verified. Needs a question already written down; an unexplored request goes to `loop`.
+description: Answers open questions an existing brief, plan, or task already raised — spikes, prior-art digs, library and vendor comparisons, feasibility checks, reading the codebase — and writes `research/R-NNNN`. Dispatched by the `pingu` router as the research phase of the feature and spike lanes; also use directly when a specific question must be settled before an ADR can be written, or when a task turns out to rest on an assumption nobody verified. Needs a question already written down; an unexplored request goes to `pingu`.
 ---
 
 # Research

@@ -26,8 +26,8 @@ This creates `docs/vault/` and never overwrites anything that already exists, so
 The seeded notes start as templates. **Start Claude Code in the repo and say "set up the vault"** — or just start any work, and the loop will stop and offer it, because session start reports:
 
 ```
-[loop] phase: setup   (vault seeded but not filled in)
-[loop] SETUP NEEDED — still templates: context.md, engineering.md, glossary.md, security.md
+[pingu] phase: setup   (vault seeded but not filled in)
+[pingu] SETUP NEEDED — still templates: context.md, engineering.md, glossary.md, security.md
 ```
 
 Setup reads your repo — package manifest, test config, linter and CI rules, directory layout, commit history — drafts the standards, context index, and glossary from what the code actually does, then asks you about the parts it cannot infer: your definition of done, your testing bar, what counts as sensitive data here, and which existing patterns you would rather people stopped copying.
@@ -97,11 +97,11 @@ Delegated automatically; you can also ask for one by name.
 ## 6. Tooling
 
 ```bash
-loop status              # lane, phase, blockers, unsynced tasks
-loop doctor              # validate the vault before a PR
-loop gate [phase]        # evaluate a phase's exit condition
-loop next-id task        # allocate an ID safely
-loop new adr "Title"     # scaffold a note, print its path
+pingu status              # lane, phase, blockers, unsynced tasks
+pingu doctor              # validate the vault before a PR
+pingu gate [phase]        # evaluate a phase's exit condition
+pingu next-id task        # allocate an ID safely
+pingu new adr "Title"     # scaffold a note, print its path
 
 gh-sync push             # create Issues for new tasks
 gh-sync status           # push status changes, close on done
@@ -116,7 +116,7 @@ These are on the PATH while the plugin is enabled. The implementations live in `
 
 ### Gates
 
-`loop gate <phase>` evaluates a phase's exit condition instead of asking the model whether it met its own. Every check comes back as one of:
+`pingu gate <phase>` evaluates a phase's exit condition instead of asking the model whether it met its own. Every check comes back as one of:
 
 | | |
 |---|---|
@@ -126,9 +126,9 @@ These are on the PATH while the plugin is enabled. The implementations live in `
 | `manual-review` | No tool can decide this. Never auto-passes. |
 
 ```bash
-loop gate                # gate whatever phase status infers
-loop gate verify         # show what would run
-loop gate verify --execute
+pingu gate                # gate whatever phase status infers
+pingu gate verify         # show what would run
+pingu gate verify --execute
 ```
 
 Only three of the nine gates — `talk`, `research`, `plan` — can be settled by tooling alone. `adr` and `diagnose` are entirely human judgement; the other four are part-checked and part-manual. So most phases end with checks still outstanding, and that is the intended answer — a green tick that meant "the model said so" is what this replaces.
@@ -177,7 +177,7 @@ If output quality drifts, the cause is almost always a thin standards file or a 
 | "Duplicate hooks file detected" | Something added a `hooks` field back to `plugin.json`. Claude Code auto-loads `hooks/hooks.json`; declaring it is the bug. |
 | Session start says "no vault" | Run `vault-init` from the repo root. |
 | `gh-sync` fails | `gh auth status`, and set `gh_repo` if the git remote is ambiguous. |
-| `loop: command not found` | `bin/` only joins the PATH while the plugin is enabled. Check `claude plugin list`, or call `scripts/loop.py` directly. |
-| Loop feels heavyweight | It picked the wrong lane. Say "this is a chore" or "this is a bug" and it will shorten. |
-| Generic-sounding output | Setup was skipped. Run `loop status`; if it says SETUP NEEDED, say "set up the vault". |
+| `pingu: command not found` | `bin/` only joins the PATH while the plugin is enabled. Check `claude plugin list`, or call `scripts/pingu.py` directly. |
+| The loop feels heavyweight | It picked the wrong lane. Say "this is a chore" or "this is a bug" and it will shorten. |
+| Generic-sounding output | Setup was skipped. Run `pingu status`; if it says SETUP NEEDED, say "set up the vault". |
 | Setup keeps prompting | A file still has `status: template` in its frontmatter. Setup flips these to `ready` as it fills each one. |
