@@ -3,7 +3,7 @@
 import pytest
 
 import pingu
-from conftest import write_note
+from conftest import PLUGIN_ROOT, write_note
 
 
 # --------------------------------------------------------------- status resilience
@@ -327,3 +327,55 @@ def test_a_note_scaffolded_by_new_passes_doctor(run_pingu, vault):
         assert run_pingu("new", kind, title) == 0
 
     assert run_pingu("doctor") == 0
+
+
+# ------------------------------------------------------- SessionStart quietness
+
+def test_status_quiet_says_nothing_when_there_is_no_vault(repo, monkeypatch, capsys):
+    """The SessionStart hook runs in *every* project, because a personal-scope
+    plugin loads everywhere. A repo with no vault is not using the loop, so
+    announcing that costs context in every unrelated session and invites nobody.
+
+    The hook opts into silence rather than the CLI defaulting to it — a human
+    who types `pingu status` in a bare repo should still be told what to do."""
+    import shutil
+    import pingu
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+    shutil.rmtree(repo / "docs" / "vault")
+
+    assert pingu.main(["pingu", "status", "--quiet"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_status_without_quiet_still_explains_a_missing_vault(repo, monkeypatch, capsys):
+    import shutil
+    import pingu
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+    shutil.rmtree(repo / "docs" / "vault")
+
+    assert pingu.main(["pingu", "status"]) == 0
+    out = capsys.readouterr().out
+    assert "no vault" in out and "vault-init" in out
+
+
+def test_quiet_still_reports_once_a_vault_exists(repo, monkeypatch, capsys):
+    """Silence is only for the no-vault case. A real vault is worth announcing."""
+    import pingu
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+
+    assert pingu.main(["pingu", "status", "--quiet"]) == 0
+    assert "[pingu]" in capsys.readouterr().out
+
+
+def test_the_session_start_hook_asks_for_quiet():
+    """If hooks.json stops passing --quiet, every unrelated project gets the
+    no-vault banner again."""
+    import json
+
+    hooks = json.loads((PLUGIN_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    command = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+
+    assert "status" in command and "--quiet" in command, command

@@ -280,10 +280,16 @@ def infer_phase(notes, lane=None):
     return "done", "loop closed"
 
 
-def cmd_status(vault):
+def cmd_status(vault, quiet=False):
     if not vault.is_dir():
-        print(f"[pingu] no vault at {vault}")
-        print("[pingu] phase: talk — run vault-init to start")
+        # The SessionStart hook passes --quiet. It fires in *every* project,
+        # because a personal-scope plugin loads everywhere, and a repo with no
+        # vault is not using the loop — so this banner would be context spent in
+        # every unrelated session telling somebody something they did not ask.
+        # A human who types `pingu status` still gets the explanation.
+        if not quiet:
+            print(f"[pingu] no vault at {vault}")
+            print("[pingu] phase: talk — run vault-init to start")
         return 0
 
     notes = load_notes(vault)
@@ -721,7 +727,8 @@ def cmd_gate(vault, phase, execute):
 
 def main(argv):
     execute = "--execute" in argv
-    argv = [a for a in argv if a != "--execute"]
+    quiet = "--quiet" in argv
+    argv = [a for a in argv if a not in ("--execute", "--quiet")]
     if len(argv) < 2:
         print(__doc__)
         return 1
@@ -730,7 +737,7 @@ def main(argv):
     if cmd == "gate":
         return cmd_gate(vault, argv[2] if len(argv) > 2 else None, execute)
     if cmd == "status":
-        return cmd_status(vault)
+        return cmd_status(vault, quiet)
     if cmd == "doctor":
         return cmd_doctor(vault)
     if cmd == "next-id":

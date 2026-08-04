@@ -16,7 +16,7 @@ git clone <this repo> <repo>/.claude/skills/agent-pingu     # shared via git
 
 Restart Claude Code. Confirm with `claude plugin list` — you should see `agent-pingu@skills-dir`.
 
-Developing the plugin itself? Symlink instead, so edits apply in place:
+Developing the plugin itself? Symlink instead — discovery follows the link, and edits then apply in place:
 
 ```bash
 ln -s /path/to/agent-pingu ~/.claude/skills/agent-pingu
