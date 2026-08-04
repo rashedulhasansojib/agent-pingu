@@ -59,3 +59,42 @@ def test_the_router_still_claims_everything_else():
     """Narrowing the phases only works if `loop` remains the catch-all."""
     description = description_of("loop").lower()
     assert "build, fix, ship, refactor, investigate, or add anything" in description
+
+
+# --------------------------------------------------------------- frontmatter yaml
+
+def frontmatter_lines(path):
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return []
+    end = text.find("\n---", 3)
+    return text[3:end].splitlines() if end != -1 else []
+
+
+def all_component_files():
+    for pattern in ("skills/*/SKILL.md", "agents/*.md"):
+        yield from sorted(PLUGIN_ROOT.glob(pattern))
+
+
+@pytest.mark.parametrize(
+    "path", list(all_component_files()), ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_frontmatter_has_no_unquoted_colon_space(path):
+    """`key: some text: more text` is not valid YAML.
+
+    Claude Code does not fall back gracefully — it drops *every* frontmatter
+    field for that file, so the skill loads nameless and description-less and
+    simply never triggers. It fails silently at runtime, which is why this is a
+    test and not a code review note. Found by `claude plugin validate` after
+    three descriptions were rewritten with a colon in the prose.
+    """
+    for line in frontmatter_lines(path):
+        key, sep, value = line.partition(":")
+        if not sep or line.startswith((" ", "\t", "#")):
+            continue
+        value = value.strip()
+        if value.startswith(('"', "'")):
+            continue
+        assert ": " not in value, (
+            f"{path.parent.name}/{path.name} — '{key}' contains an unquoted "
+            f'": " so the whole frontmatter block fails to parse. '
+            f"Use an em dash, or quote the value.")

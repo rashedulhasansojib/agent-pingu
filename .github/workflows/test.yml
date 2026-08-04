@@ -41,3 +41,15 @@ jobs:
         run: python -c "import json; json.load(open('.claude-plugin/plugin.json'))"
       - name: hooks.json is valid JSON
         run: python -c "import json; json.load(open('hooks/hooks.json'))"
+
+      # The JSON checks above are strictly weaker than what the CLI does. It
+      # parses every skill and agent's frontmatter, and a YAML error there is
+      # invisible at runtime: Claude Code drops the whole block and the skill
+      # loads nameless, so it simply never triggers. Not preinstalled on the
+      # runner, and not authenticated — validate is a local schema check.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install -g @anthropic-ai/claude-code
+      - name: claude plugin validate
+        run: claude plugin validate .
