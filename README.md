@@ -2,7 +2,9 @@
 
 A vault-backed engineering loop for Claude Code that handles **any** development work — features, bugs, incidents, refactors, spikes, chores — with state in a project-local Obsidian vault and tasks mirrored to GitHub Issues.
 
-See [MANUAL.md](MANUAL.md) for practical instructions.
+See [MANUAL.md](MANUAL.md) for practical instructions, and
+[WALKTHROUGH.md](WALKTHROUGH.md) for an end-to-end run on a real project —
+install, setup, every phase, and the two things that went wrong.
 
 ## Why
 
