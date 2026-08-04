@@ -90,7 +90,11 @@ is rejected with a message telling you to use a list.
 ## Layout
 
 ```
-skills/
+.claude-plugin/
+  plugin.json     manifest, and the userConfig prompted at enable time
+                  (vault_dir, gh_repo, autonomy)
+
+skills/           phases advance the state machine; disciplines are techniques
   start           router — picks the lane, sequences phases, delegates
   vault           spine: layout, schema, IDs, context resolution
   setup           drafts standards and context by reading the repo
@@ -105,20 +109,39 @@ skills/
   grilling        reusable interview discipline
   domain-modeling keeps the shared language sharp
 
-agents/
+agents/           each runs in its own context, which is the point of them
   architect  senior-engineer  sqa  security-reviewer
   reviewer-standards  reviewer-spec
 
 bin/              on the Bash tool's PATH, so skills call these by name
-  pingu          status | doctor | gate | next-id | new
-  gh-sync        push | status | pull
-  vault-init     scaffolds docs/vault/
+  pingu           status | doctor | gate | next-id | new
+  gh-sync         push | status | pull
+  vault-init      scaffolds docs/vault/
 
 scripts/          the implementations behind bin/
-  pingu.py  gh_sync.py  vault_init.sh
+  pingu.py        vault state, lane inference, doctor, the gate runner
+  gh_sync.py      GitHub Issue mirroring
+  vault_init.sh   scaffolds the vault; never overwrites an existing file
 
-tests/            pytest suite over the vault tooling
+hooks/
+  hooks.json      SessionStart — puts `pingu status` in front of every session
+
+templates/        Obsidian templates, for writing a note by hand
+  brief.md  task.md  adr.md
+
+tests/            pytest; the tooling itself has no third-party dependencies
+  test_pingu.py   lanes, phase inference, doctor, vault paths
+  test_gates.py   the gate runner: vault, command and manual checks
+  test_gh_sync.py frontmatter parsing, the push guard, idempotency
+  test_skills.py  docs and code agreeing — lane table vs LANES, gate table vs
+                  GATES, frontmatter validity, plugin identity, this diagram
+
+.github/workflows/
+  test.yml        pytest on 3.9 and 3.13, shell syntax, claude plugin validate
 ```
+
+That is what ships. What it *creates* is `docs/vault/` inside your repo — see
+the `vault` skill for that tree.
 
 ## Design decisions worth knowing
 

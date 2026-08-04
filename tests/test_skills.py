@@ -297,3 +297,43 @@ def test_skill_invocations_use_the_current_namespace(doc):
 
     for match in re.findall(r"`/([a-z-]+):", text):
         assert match == PLUGIN_NAME, f"{doc} documents /{match}: — should be /{PLUGIN_NAME}:"
+
+
+# ------------------------------------------------------------------- layout
+
+SKIP_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache"}
+
+
+def layout_block():
+    """The fenced block under README's `## Layout` heading."""
+    text = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
+    section = re.search(r"^## Layout$.*?^```\n(.*?)^```", text, re.MULTILINE | re.DOTALL)
+    assert section, "README no longer has a '## Layout' fenced block"
+    return section.group(1)
+
+
+def test_the_layout_block_lists_every_directory_that_ships():
+    """A layout diagram nobody checks is a diagram that quietly goes stale — it
+    already had, missing hooks/, templates/, .claude-plugin/ and .github/."""
+    block = layout_block()
+    shipped = sorted(
+        p.name for p in PLUGIN_ROOT.iterdir()
+        if p.is_dir() and p.name not in SKIP_DIRS)
+
+    missing = [d for d in shipped if f"{d}/" not in block]
+    assert not missing, f"README's layout block never mentions: {', '.join(missing)}"
+
+
+def test_the_layout_block_does_not_invent_directories():
+    """The inverse: everything the diagram claims must actually be there."""
+    claimed = set(re.findall(r"^([a-z._-]+)/", layout_block(), re.MULTILINE))
+
+    for name in claimed:
+        assert (PLUGIN_ROOT / name).is_dir(), f"README claims {name}/ which does not exist"
+
+
+def test_the_layout_block_names_the_real_scripts_and_bin_entries():
+    block = layout_block()
+
+    for path in sorted((PLUGIN_ROOT / "bin").iterdir()) + sorted((PLUGIN_ROOT / "scripts").iterdir()):
+        assert path.name in block, f"{path.parent.name}/{path.name} is missing from the layout"
