@@ -31,6 +31,41 @@ ROUTER_TERRITORY = [
 ]
 
 
+MARKDOWN_SOURCES = sorted(
+    list((PLUGIN_ROOT / "skills").rglob("*.md")) + list((PLUGIN_ROOT / "agents").rglob("*.md"))
+)
+
+
+@pytest.mark.parametrize("path", MARKDOWN_SOURCES, ids=lambda p: str(p.relative_to(PLUGIN_ROOT)))
+def test_no_skill_relies_on_user_config_interpolation(path):
+    """`${user_config.KEY}` does not interpolate in a skill or agent body — it
+    reaches the model as that literal string, verified against a real session.
+
+    `start` carried `${user_config.autonomy}` for eleven commits, so the whole
+    full-loop/gated setting silently did nothing while two documents described
+    it as working. Read plugin options through `pingu status`, which resolves
+    them from the settings file.
+    """
+    text = path.read_text(encoding="utf-8")
+    hits = re.findall(r"\$\{user_config\.\w+\}", text)
+    assert not hits, (
+        f"{path.relative_to(PLUGIN_ROOT)} expects {hits} to be substituted. It is not. "
+        "Resolve the option in scripts/pingu.py and surface it via `pingu status`."
+    )
+
+
+def test_the_router_reads_autonomy_from_the_status_output():
+    """The counterpart to the test above: having removed the placeholder, the
+    router still has to learn the level from somewhere."""
+    text = (PLUGIN_ROOT / "skills" / "start" / "SKILL.md").read_text(encoding="utf-8")
+    assert "autonomy" in text, "the router no longer mentions autonomy at all"
+    assert re.search(r"`pingu status`[^\n]*autonomy|autonomy[^\n]*`pingu status`", text), (
+        "the router mentions autonomy but does not say to read it from `pingu status`"
+    )
+    for level in ("full-loop", "gated"):
+        assert level in text, f"the router does not say what {level} does"
+
+
 def description_of(skill):
     text = (PLUGIN_ROOT / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
     match = re.search(r"^description:\s*(.+)$", text, re.MULTILINE)

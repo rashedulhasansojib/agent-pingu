@@ -11,12 +11,24 @@ Invoked as `pingu <command>` — bin/pingu puts this on the Bash tool's PATH.
   pingu gate [<phase>]      evaluate a phase's exit condition. Plans by default;
                            --execute runs the commands context.md declares.
                            Defaults to the phase status infers.
+  pingu vault-path          print the resolved vault directory
 
-Config, read from the environment:
-  CLAUDE_PROJECT_DIR              repo root. Exported to hook processes only, so
-                                  this falls back to `git rev-parse --show-toplevel`
-  CLAUDE_PLUGIN_OPTION_VAULT_DIR  vault path relative to the repo, defaults to docs/vault
-  PINGU_STATE_MAX_BLOCKED          cap on blocked lines printed by status (default 5)
+Plugin options (vault_dir, gh_repo, autonomy) come from `pluginConfigs` in the
+settings files, read most specific first:
+
+  <repo>/.claude/settings.local.json   personal override for this repo
+  <repo>/.claude/settings.json         the team's setting, committed
+  ~/.claude/settings.json              personal default
+
+Read directly because neither route that looks like it should work does:
+`${user_config.KEY}` never interpolates in a skill body, and
+`CLAUDE_PLUGIN_OPTION_*` is not exported to the Bash tool. The env vars are still
+honoured first if anything ever does export them.
+
+From the environment:
+  CLAUDE_PROJECT_DIR        repo root. Exported to hook processes only, so this
+                            falls back to `git rev-parse --show-toplevel`
+  PINGU_STATE_MAX_BLOCKED   cap on blocked lines printed by status (default 5)
 
 No third-party dependencies, so it runs wherever Python 3 does. The tests need
 pytest; the tooling itself does not.
@@ -115,9 +127,84 @@ def repo_root():
     return Path(".").resolve()
 
 
+PLUGIN_NAME = "agent-pingu"
+AUTONOMY_LEVELS = ("full-loop", "gated")
+DEFAULT_AUTONOMY = "full-loop"
+
+
+def settings_files():
+    """Where a plugin option can be declared, most specific first.
+
+    Mirrors Claude Code's own settings precedence, minus the enterprise policy
+    file — that one is for administrators pinning behaviour, and this plugin has
+    no business reading it.
+    """
+    root = repo_root()
+    return (
+        root / ".claude" / "settings.local.json",
+        root / ".claude" / "settings.json",
+        Path.home() / ".claude" / "settings.json",
+    )
+
+
+def plugin_option(key, default=None):
+    """Resolve one of plugin.json's userConfig options.
+
+    The two obvious routes both turn out to be fiction, verified against a real
+    session rather than assumed:
+
+      - `${user_config.KEY}` does not interpolate in a SKILL.md body. It arrives
+        at the model as that literal string.
+      - `CLAUDE_PLUGIN_OPTION_KEY` is not exported to the Bash tool.
+
+    So an option is only real if we read the settings file ourselves. The env var
+    is still honoured first in case some other context does export it; nothing
+    breaks if it stays absent forever.
+
+    Never raises. This runs inside the SessionStart hook, where an exception over
+    a stray comma in a file this plugin does not own would cost the whole session.
+    """
+    env = os.environ.get("CLAUDE_PLUGIN_OPTION_" + key.upper())
+    if env:
+        return env
+
+    for path in settings_files():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        configs = data.get("pluginConfigs")
+        if not isinstance(configs, dict):
+            continue
+        for name, entry in configs.items():
+            # The suffix records how the plugin was discovered — @skills-dir, or
+            # a marketplace name. Matching on it would make the setting silently
+            # stop working when someone installs it a different way.
+            if name.split("@", 1)[0] != PLUGIN_NAME or not isinstance(entry, dict):
+                continue
+            options = entry.get("options")
+            if isinstance(options, dict) and options.get(key):
+                return str(options[key])
+    return default
+
+
+def autonomy():
+    """(level, unrecognised_raw_value).
+
+    An unknown value falls back rather than failing, but reports itself, because
+    silently treating `Gated ` as the default is how somebody runs unattended for
+    a week believing they had asked to be stopped at every phase.
+    """
+    raw = plugin_option("autonomy", DEFAULT_AUTONOMY)
+    if raw in AUTONOMY_LEVELS:
+        return raw, None
+    return DEFAULT_AUTONOMY, raw
+
+
 def vault_path():
-    rel = os.environ.get("CLAUDE_PLUGIN_OPTION_VAULT_DIR") or "docs/vault"
-    return repo_root() / rel
+    return repo_root() / plugin_option("vault_dir", "docs/vault")
 
 
 def parse_frontmatter(path):
@@ -300,6 +387,18 @@ def cmd_status(vault, quiet=False):
     else:
         phase, why = infer_phase(notes, lane)
     print(f"[pingu] vault: {vault.name}   lane: {lane}   phase: {phase}   ({why})")
+
+    # The router used to carry this as `${user_config.autonomy}` in its own text,
+    # which never interpolated — so the setting did nothing at all. Stating it
+    # here puts it in front of every session, and `start` reads it from this
+    # output rather than from a placeholder.
+    level, unrecognised = autonomy()
+    if unrecognised:
+        print(f"[pingu] autonomy setting {unrecognised!r} is not recognised — "
+              f"expected one of: {', '.join(AUTONOMY_LEVELS)}")
+    how = ("runs the whole lane, then stops once for review" if level == "full-loop"
+           else "stops after every phase for your approval")
+    print(f"[pingu] autonomy: {level} — {how}")
 
     if todo:
         names = ", ".join(sorted(n["path"].name for n in todo))
@@ -740,6 +839,12 @@ def main(argv):
         return cmd_status(vault, quiet)
     if cmd == "doctor":
         return cmd_doctor(vault)
+    if cmd == "vault-path":
+        # vault_init.sh asks this rather than resolving vault_dir itself, so the
+        # scaffolder and the tooling cannot end up pointed at different
+        # directories — a failure that looks like an empty vault, not an error.
+        print(vault)
+        return 0
     if cmd == "next-id":
         if len(argv) < 3 or argv[2] not in TYPES:
             print(f"usage: pingu next-id <{'|'.join(TYPES)}>", file=sys.stderr)

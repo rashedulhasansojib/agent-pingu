@@ -127,7 +127,7 @@ agents/           each runs in its own context, which is the point of them
   reviewer-standards  reviewer-spec
 
 bin/              on the Bash tool's PATH, so skills call these by name
-  pingu           status | doctor | gate | next-id | new
+  pingu           status | doctor | gate | next-id | new | vault-path
   gh-sync         push | status | pull
   vault-init      scaffolds docs/vault/
 
@@ -177,6 +177,8 @@ the `vault` skill for that tree.
 **Phases delegate to agents rather than forking.** A skill can run in its own subagent with `context: fork`, but a fork receives only the SKILL.md text — not the conversation, so not which task, which epic, or which run. Every phase here needs that. The `skills:` field on an agent is the shape that fits: the agent's body is the system prompt and the caller's handoff is the task.
 
 **No `hooks` field in `plugin.json`.** Claude Code auto-loads `hooks/hooks.json`; declaring it causes duplicate-load errors.
+
+**Plugin options are read from the settings file, not substituted.** The two mechanisms that look right both fail silently: `${user_config.KEY}` does not interpolate in a skill body — it reaches the model as that literal string — and `CLAUDE_PLUGIN_OPTION_*` is not exported to the Bash tool. All three options here were no-ops until this was checked against a real session. They now resolve through one function that reads `pluginConfigs` directly, and `pingu status` states the autonomy level every session so it is visible rather than assumed. Put the setting in `<repo>/.claude/settings.json` and commit it if a team should share it.
 
 **Setup is not autonomous.** Reading a repo tells you what the code does, never what the team agreed. Setup drafts the first from evidence, marks it as inferred, and asks about the second.
 

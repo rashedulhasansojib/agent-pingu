@@ -28,7 +28,7 @@ from pathlib import Path
 # One definition of where the vault is, shared with pingu.py. Two scripts each
 # resolving it their own way is how `vault_dir` ends up half-implemented.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from pingu import vault_path  # noqa: E402
+from pingu import plugin_option, vault_path  # noqa: E402
 
 STATUS_LABELS = {
     "todo": "pingu:todo",
@@ -96,7 +96,7 @@ def task_notes(vault):
 
 
 def repo_flag():
-    repo = os.environ.get("CLAUDE_PLUGIN_OPTION_GH_REPO")
+    repo = plugin_option("gh_repo")
     return ["--repo", repo] if repo else []
 
 

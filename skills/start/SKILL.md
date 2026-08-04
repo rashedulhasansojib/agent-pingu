@@ -7,7 +7,7 @@ description: The orchestrator for all development work in a vault-backed repo â€
 
 You are running an engineering loop whose state lives in the vault, not in this conversation. Read the `vault` skill before touching any note.
 
-Autonomy for this install is `${user_config.autonomy}`. On `full-loop` you run every phase of the lane to the end and stop once, with a review packet. On `gated` you stop after each phase.
+`pingu status` reports the autonomy level for this install on its `[pingu] autonomy:` line. On `full-loop` run every phase of the lane to the end and stop once, with a review packet. On `gated` stop after each phase and wait. Read the level from that line â€” never assume it.
 
 ## Orienting
 

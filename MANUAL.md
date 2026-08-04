@@ -109,14 +109,31 @@ It halts early and writes a `blocked` note if: the request is ambiguous in a way
 Switch to stopping at every phase by setting `autonomy` to `gated` in the
 `/plugin` interface, under this plugin's configuration.
 
-There is no CLI equivalent. `--config` is a flag on `claude plugin install`, and
-a plugin discovered under a skills directory is never installed — it is loaded in
-place, so there is nothing for `install` to act on. If you would rather edit the
-file, the value lives in `~/.claude/settings.json`:
+`pingu status` prints the level it resolved on every session, so you can always
+see which one you are on rather than inferring it from behaviour:
+
+```
+[pingu] autonomy: gated — stops after every phase for your approval
+```
+
+There is no CLI equivalent to `/plugin` for setting it. `--config` is a flag on
+`claude plugin install`, and a plugin discovered under a skills directory is
+never installed — it is loaded in place, so there is nothing for `install` to act
+on. To edit the file directly, the value lives under `pluginConfigs`:
 
 ```json
 { "pluginConfigs": { "agent-pingu@skills-dir": { "options": { "autonomy": "gated" } } } }
 ```
+
+Three files are read, most specific first — `<repo>/.claude/settings.local.json`,
+`<repo>/.claude/settings.json`, then `~/.claude/settings.json`. **For a team, put
+it in `<repo>/.claude/settings.json` and commit it**, so everyone on the repo runs
+at the same autonomy instead of whatever each person happens to have set
+personally. `settings.local.json` is the per-person override on top.
+
+The same three files supply `vault_dir` and `gh_repo`. An unrecognised value is
+reported and falls back to the default rather than being silently accepted — a
+typo'd `Gated` is how somebody runs unattended for a week believing otherwise.
 
 ## 6. The agents
 

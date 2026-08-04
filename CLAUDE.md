@@ -84,9 +84,22 @@ something it cannot is worse than one that says a human has to look.
 Keep each `SKILL.md` under ~500 lines; push detail into `references/`, which
 loads only when needed.
 
-## Known gap
+## Plugin options do not resolve themselves
 
-`${user_config.autonomy}` in `skills/start/SKILL.md` does **not** interpolate —
-it reaches the model as the literal string. The `full-loop` / `gated` distinction
-documented in `README.md` and `MANUAL.md` therefore does nothing. Do not build
-on that substitution working in skill body text.
+Two mechanisms that look like they work, and do not — both verified against a
+real session, not assumed:
+
+- `${user_config.KEY}` does **not** interpolate in a SKILL.md or agent body. It
+  arrives at the model as that literal string.
+- `CLAUDE_PLUGIN_OPTION_KEY` is **not** exported to the Bash tool.
+
+All three of this plugin's `userConfig` options were no-ops for that reason.
+They are now resolved by `plugin_option()` in `scripts/pingu.py`, which reads
+`pluginConfigs` out of the settings files directly, and surfaced to the model
+through `pingu status` — whose SessionStart output does reach context (also
+verified). `test_no_skill_relies_on_user_config_interpolation` stops the
+placeholder coming back.
+
+Anything that resolves an option must go through `plugin_option`. `gh_sync.py`
+imports it and `vault_init.sh` shells out to `pingu vault-path` for exactly that
+reason: a second resolver is how an option ends up half-implemented.

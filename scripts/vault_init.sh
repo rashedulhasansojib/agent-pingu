@@ -9,7 +9,17 @@
 set -euo pipefail
 
 REPO="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-VAULT="$REPO/${VAULT_DIR:-${CLAUDE_PLUGIN_OPTION_VAULT_DIR:-docs/vault}}"
+
+# An explicit VAULT_DIR wins; otherwise ask pingu, which is the one place that
+# knows how a plugin option is actually resolved. Resolving it here as well is
+# how the scaffolder and the tooling end up pointed at different directories.
+if [ -n "${VAULT_DIR:-}" ]; then
+  VAULT="$REPO/$VAULT_DIR"
+else
+  VAULT="$(python3 "$(dirname "$0")/pingu.py" vault-path 2>/dev/null)" \
+    || VAULT="$REPO/docs/vault"
+  [ -n "$VAULT" ] || VAULT="$REPO/docs/vault"
+fi
 NAME="$(basename "$REPO")"
 TODAY="$(date +%F)"
 
