@@ -14,6 +14,11 @@ Invoked as `gh-sync <command>` — bin/gh-sync puts this on the Bash tool's PATH
 `push` refuses on a public repo, because it mirrors note bodies verbatim and the
 vault holds internal context. Pass --public-ok when that is what you want.
 
+`pull` and `status` refuse when `gh_repo` names a repository other than this
+checkout's own remote. `gh_repo` can come from a committed settings file, and
+`pull` writes Issue comment bodies into task notes that the loop then reads as
+project state. Pass --allow-foreign when the other repo is intended.
+
 Uses the `gh` CLI, so authentication is whatever the developer already has.
 No third-party Python dependencies.
 """
@@ -28,7 +33,7 @@ from pathlib import Path
 # One definition of where the vault is, shared with pingu.py. Two scripts each
 # resolving it their own way is how `vault_dir` ends up half-implemented.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from pingu import plugin_option, vault_path, yaml_scalar  # noqa: E402
+from pingu import plugin_option, vault_path, yaml_quoted, yaml_scalar  # noqa: E402
 
 STATUS_LABELS = {
     "todo": "pingu:todo",
@@ -79,7 +84,19 @@ def write_field(path, key, value):
         # back together wrongly. Refuse rather than corrupt someone's note.
         raise ValueError(f"{path}: no frontmatter block to write '{key}' into")
     fm, rest = text[3:end], text[end:]
-    line = f"{key}: {value}"
+    # Only ever called with gh_issue today, which is numeric — but nothing stops
+    # the next caller passing prose, and an unquoted free-text value is exactly
+    # the unparseable-note bug the quoting on the `pingu new` path removed.
+    # Numbers, booleans and null stay bare so `gh_issue: 42` is still a number
+    # to Dataview rather than a string.
+    # Integers stay bare so `gh_issue: 42` is still a number to Dataview.
+    # Everything else is quoted, including the strings "null" and "true": no
+    # caller needs a literal YAML null, and exempting those words recreates
+    # exactly the "is it a value or a keyword" ambiguity the quoting removed.
+    rendered = str(value)
+    if not re.fullmatch(r"-?\d+", rendered):
+        rendered = yaml_quoted(rendered)
+    line = f"{key}: {rendered}"
     if re.search(rf"^{re.escape(key)}:", fm, re.MULTILINE):
         fm = re.sub(rf"^{re.escape(key)}:.*$", line, fm, count=1, flags=re.MULTILINE)
     else:
@@ -97,6 +114,55 @@ def task_notes(vault):
 def repo_flag():
     repo = plugin_option("gh_repo")
     return ["--repo", repo] if repo else []
+
+
+REMOTE_URL = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<name>[^/]+?)(?:\.git)?/?$")
+
+
+def git_remote_repo():
+    """`owner/name` from this repo's origin, or None if it cannot be read.
+
+    Deliberately git, not `gh repo view` — `gh` would answer for whatever
+    `--repo` we pass it, and the question here is what *this* checkout points at.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=vault_path().parent.parent, capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    match = REMOTE_URL.search(result.stdout.strip())
+    return f"{match.group('owner')}/{match.group('name')}" if match else None
+
+
+def foreign_repo_refusal(command, allow_foreign):
+    """A message to print and refuse on, or None to proceed.
+
+    `push` sends the vault out and guards on visibility. `pull` and `status` run
+    the other way — into the vault, and into the repo's Issues — so they need the
+    opposite question answered: is this repository ours at all? `gh_repo` is
+    resolved from settings, and `<repo>/.claude/settings.json` is a file a pull
+    request can carry, so a contributor's branch can aim these at a repository
+    they control. `pull` then writes its comment bodies into task notes, which
+    the loop reads as project state.
+    """
+    declared = plugin_option("gh_repo")
+    if not declared or allow_foreign:
+        return None
+    remote = git_remote_repo()
+    if remote is None:
+        return (f"refusing to {command}: gh_repo is {declared!r}, and this repo's own "
+                f"remote could not be read, so there is nothing to check it against.\n"
+                f"Re-run with --allow-foreign if that repo is intended.")
+    if declared.lower() != remote.lower():
+        return (f"refusing to {command}: gh_repo is {declared!r}, but this repo's remote "
+                f"is {remote!r}.\n"
+                f"{'Comment bodies from it are written into your notes and read by the loop as project state.' if command == 'pull' else 'This would close Issues and move labels in a repo that is not this one.'}\n"
+                f"Re-run with --allow-foreign if that repo is intended.")
+    return None
 
 
 def ensure_label(name):
@@ -222,13 +288,17 @@ def cmd_push(vault, public_ok=False):
     return 0
 
 
-def cmd_status(vault):
+def cmd_status(vault, allow_foreign=False):
     """Push status changes, and report what actually happened.
 
     These calls used to run with check=False and print success regardless, so a
     failed sync was indistinguishable from a working one. The verify phase of
     this very loop says to record the actual result; the tooling should too.
     """
+    refusal = foreign_repo_refusal("status", allow_foreign)
+    if refusal:
+        print(refusal)
+        return 1
     failed = 0
     for path, fm, _ in task_notes(vault):
         number = read_field(fm, "gh_issue")
@@ -264,7 +334,11 @@ def cmd_status(vault):
     return 1 if failed else 0
 
 
-def cmd_pull(vault):
+def cmd_pull(vault, allow_foreign=False):
+    refusal = foreign_repo_refusal("pull", allow_foreign)
+    if refusal:
+        print(refusal)
+        return 1
     for path, fm, _ in task_notes(vault):
         number = read_field(fm, "gh_issue")
         if not number:
@@ -295,7 +369,8 @@ def cmd_pull(vault):
 def main():
     args = sys.argv[1:]
     public_ok = "--public-ok" in args
-    args = [a for a in args if a != "--public-ok"]
+    allow_foreign = "--allow-foreign" in args
+    args = [a for a in args if a not in ("--public-ok", "--allow-foreign")]
 
     if not args or args[0] not in ("push", "status", "pull"):
         print(__doc__)
@@ -306,7 +381,8 @@ def main():
         return 1
     if args[0] == "push":
         return cmd_push(vault, public_ok=public_ok) or 0
-    return {"status": cmd_status, "pull": cmd_pull}[args[0]](vault) or 0
+    return {"status": cmd_status, "pull": cmd_pull}[args[0]](
+        vault, allow_foreign=allow_foreign) or 0
 
 
 if __name__ == "__main__":

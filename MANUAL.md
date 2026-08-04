@@ -233,6 +233,18 @@ gh-sync push                # refuses on a public repo, and on an unknown one
 gh-sync push --public-ok    # yes, this repo is meant to be public
 ```
 
+`pull` and `status` guard the other direction. `pull` appends Issue comment
+bodies into task notes, and the loop reads those notes as project state — so
+comments from a repository someone else controls become instructions the agent
+takes seriously. Since `gh_repo` can arrive in a committed `.claude/settings.json`,
+a pull request is enough to aim it somewhere else. Both refuse when `gh_repo`
+disagrees with this checkout's own git remote:
+
+```bash
+gh-sync pull                  # refuses if gh_repo is not this repo's remote
+gh-sync pull --allow-foreign  # yes, that other repo is intended
+```
+
 `push` also looks for an Issue already titled with the task's ID before creating one, and adopts it. That covers the window where a previous run created the Issue but died before writing `gh_issue` back into the note.
 
 ## 8. Working as a team

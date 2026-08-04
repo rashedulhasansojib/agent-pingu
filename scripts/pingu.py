@@ -128,7 +128,13 @@ def repo_root():
 
 
 PLUGIN_NAME = "agent-pingu"
-AUTONOMY_LEVELS = ("full-loop", "gated")
+# Keyed by level rather than written as an if/else, so adding a third one has to
+# say what it does instead of silently inheriting whichever branch came last.
+# Same reasoning as LANES and GATES, and the same drift test guards it.
+AUTONOMY_LEVELS = {
+    "full-loop": "runs the whole lane, then stops once for review",
+    "gated": "stops after every phase for your approval",
+}
 DEFAULT_AUTONOMY = "full-loop"
 
 
@@ -432,9 +438,7 @@ def cmd_status(vault, quiet=False):
     if unrecognised:
         print(f"[pingu] autonomy setting {unrecognised!r} is not recognised — "
               f"expected one of: {', '.join(AUTONOMY_LEVELS)}")
-    how = ("runs the whole lane, then stops once for review" if level == "full-loop"
-           else "stops after every phase for your approval")
-    print(f"[pingu] autonomy: {level} — {how}")
+    print(f"[pingu] autonomy: {level} — {AUTONOMY_LEVELS[level]}")
 
     if todo:
         names = ", ".join(sorted(n["path"].name for n in todo))

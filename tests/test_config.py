@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+import gh_sync
 import pingu
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
@@ -90,6 +91,17 @@ def test_unreadable_settings_degrade_to_the_default(home, project):
     path.parent.mkdir(parents=True)
     path.write_text("{ not json at all", encoding="utf-8")
     assert pingu.plugin_option("autonomy", "full-loop") == "full-loop"
+
+
+def test_a_corrupt_higher_precedence_file_falls_through_to_a_valid_one(home, project):
+    """Distinct from "the file is absent", which every other fixture here
+    exercises instead. If someone later special-cased malformed settings — a
+    warning, an abort — nothing would have caught the loss of this behaviour."""
+    local = project / ".claude" / "settings.local.json"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text("{ truncated", encoding="utf-8")
+    write_settings(project / ".claude" / "settings.json", {"autonomy": "gated"})
+    assert pingu.plugin_option("autonomy", "full-loop") == "gated"
 
 
 def test_a_settings_file_without_plugin_configs_is_skipped(home, project):
@@ -220,13 +232,9 @@ def test_an_explicit_vault_dir_env_var_still_overrides_settings(home, tmp_path):
 def test_gh_repo_is_read_from_settings(home, project):
     """Third instance of the same defect: the option was documented, and read
     only from an env var that is never exported."""
-    import gh_sync
-
     write_settings(home / ".claude" / "settings.json", {"gh_repo": "acme/widgets"})
     assert gh_sync.repo_flag() == ["--repo", "acme/widgets"]
 
 
 def test_no_gh_repo_means_gh_uses_the_git_remote(home, project):
-    import gh_sync
-
     assert gh_sync.repo_flag() == []

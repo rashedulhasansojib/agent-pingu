@@ -15,6 +15,7 @@ The second is worse than the first. An error gets noticed.
 
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 import yaml
@@ -36,6 +37,10 @@ HOSTILE_TITLES = [
     "single 'quotes' and \\backslashes\\",
     "trailing colon:",
     "yes",
+    # `yaml_quoted` collapses every run of whitespace, not only the ends, and
+    # nothing in this list exercised that — so the round-trip assertion below
+    # was passing without ever testing the behaviour its docstring claims.
+    "double  space   inside",
 ]
 
 
@@ -57,6 +62,18 @@ def frontmatter_of(path):
     return text[3:end]
 
 
+def normalised(title):
+    """What `yaml_quoted` deliberately makes of a title: one line, single spaces.
+
+    A frontmatter title is a single-line scalar by construction, so collapsing
+    every run of whitespace is the writer's intent, not an accident. The tests
+    used to assert `title.strip()`, which only covered the ends — and no title in
+    the list had internal doubles, so the round-trip check passed without ever
+    exercising the behaviour it claimed to pin.
+    """
+    return " ".join(title.split())
+
+
 def parsed(path):
     """The frontmatter as a real YAML parser sees it."""
     try:
@@ -71,7 +88,7 @@ def parsed(path):
 @pytest.mark.parametrize("kind", sorted(pingu.TYPES))
 def test_a_new_note_is_valid_yaml(vault, kind, title, capsys):
     pingu.cmd_new(vault, kind, title)
-    path = __import__("pathlib").Path(capsys.readouterr().out.strip())
+    path = Path(capsys.readouterr().out.strip())
     assert parsed(path) is not None
 
 
@@ -80,15 +97,15 @@ def test_a_title_survives_the_round_trip(vault, title, capsys):
     """Valid YAML is not enough — `#caching` was dropped from a note that parsed
     perfectly well. The value has to come back the same."""
     pingu.cmd_new(vault, "task", title)
-    path = __import__("pathlib").Path(capsys.readouterr().out.strip())
-    assert parsed(path)["title"] == title.strip()
+    path = Path(capsys.readouterr().out.strip())
+    assert parsed(path)["title"] == normalised(title)
 
 
 @pytest.mark.parametrize("title", HOSTILE_TITLES)
 def test_pingus_own_reader_agrees_with_a_real_parser(vault, title, capsys):
     """The lenient reader and PyYAML disagreeing is how this stayed hidden."""
     pingu.cmd_new(vault, "task", title)
-    path = __import__("pathlib").Path(capsys.readouterr().out.strip())
+    path = Path(capsys.readouterr().out.strip())
     assert pingu.parse_frontmatter(path)["title"] == parsed(path)["title"]
 
 
@@ -96,16 +113,16 @@ def test_pingus_own_reader_agrees_with_a_real_parser(vault, title, capsys):
 def test_gh_sync_reads_the_same_title(vault, title, capsys):
     """It becomes the GitHub Issue title, so a mangled read ships to the team."""
     pingu.cmd_new(vault, "task", title)
-    path = __import__("pathlib").Path(capsys.readouterr().out.strip())
+    path = Path(capsys.readouterr().out.strip())
     fm, _ = gh_sync.split_note(path)
-    assert gh_sync.read_field(fm, "title") == title.strip()
+    assert gh_sync.read_field(fm, "title") == normalised(title)
 
 
 def test_a_newline_in_a_title_cannot_break_the_block(vault, capsys):
     """`pingu new task` joins its arguments, and a shell heredoc or a copied
     string can carry a newline into one of them."""
     pingu.cmd_new(vault, "task", "first line\nsecond: line\n---\nnot a delimiter")
-    path = __import__("pathlib").Path(capsys.readouterr().out.strip())
+    path = Path(capsys.readouterr().out.strip())
     assert parsed(path)["type"] == "task"
 
 
@@ -152,5 +169,5 @@ def test_a_note_written_through_the_cli_is_valid_yaml(repo, vault):
         env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)},
     )
     assert result.returncode == 0, result.stderr
-    path = __import__("pathlib").Path(result.stdout.strip())
+    path = Path(result.stdout.strip())
     assert parsed(path)["title"] == "Fix: the #1 thing"
