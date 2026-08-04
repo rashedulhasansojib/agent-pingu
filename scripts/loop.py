@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vault tooling for the agentic engineering loop.
+"""Vault tooling for Agent Pingu.
 
 Invoked as `loop <command>` — bin/loop puts this on the Bash tool's PATH.
 

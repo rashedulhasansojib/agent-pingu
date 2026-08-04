@@ -258,3 +258,39 @@ def test_the_skill_points_at_the_runner_rather_than_asking_for_self_assessment()
     section = re.search(r"^## Gates$(.*?)^## ", text, re.MULTILINE | re.DOTALL).group(1)
 
     assert "loop gate" in section
+
+
+# ------------------------------------------------------------------- identity
+
+PLUGIN_NAME = "agent-pingu"
+
+
+def test_the_manifest_name_matches_the_directory():
+    """A skills-directory plugin is loaded as `<dirname>@skills-dir`, and its
+    skills are namespaced by the manifest `name`. If the two disagree, the docs
+    tell people to type a prefix that does not resolve."""
+    import json
+
+    manifest = json.loads(
+        (PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+
+    assert manifest["name"] == PLUGIN_NAME
+    assert PLUGIN_ROOT.name == PLUGIN_NAME, (
+        f"directory is {PLUGIN_ROOT.name!r}, manifest says {manifest['name']!r}")
+
+
+@pytest.mark.parametrize("doc", ["README.md", "MANUAL.md"])
+def test_no_stale_project_name_survives_the_rename(doc):
+    text = (PLUGIN_ROOT / doc).read_text(encoding="utf-8").lower()
+
+    assert "agentic-loop" not in text, f"{doc} still names the old plugin"
+
+
+@pytest.mark.parametrize("doc", ["README.md", "MANUAL.md"])
+def test_skill_invocations_use_the_current_namespace(doc):
+    """Plugin skills resolve as `<plugin>:<skill>`. Documenting a bare `/adr`
+    or a stale prefix sends people to a command that does not exist."""
+    text = (PLUGIN_ROOT / doc).read_text(encoding="utf-8")
+
+    for match in re.findall(r"`/([a-z-]+):", text):
+        assert match == PLUGIN_NAME, f"{doc} documents /{match}: — should be /{PLUGIN_NAME}:"

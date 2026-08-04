@@ -1,4 +1,4 @@
-# Agentic Loop Engineering
+# Agent Pingu
 
 A vault-backed engineering loop for Claude Code that handles **any** development work — features, bugs, incidents, refactors, spikes, chores — with state in a project-local Obsidian vault and tasks mirrored to GitHub Issues.
 
@@ -13,8 +13,8 @@ The second reason matters more: **prompting skill varies across a team, and it s
 ## Install
 
 ```bash
-unzip agentic-loop.zip -d ~/.claude/skills/
-cd <your repo> && ~/.claude/skills/agentic-loop/scripts/vault_init.sh
+unzip agent-pingu.zip -d ~/.claude/skills/
+cd <your repo> && ~/.claude/skills/agent-pingu/scripts/vault_init.sh
 ```
 
 Restart Claude Code, then say **"set up the vault"**. The loop reads your repo and drafts the standards, context index, and glossary, asking you only about what it cannot infer. Until that is done, session start reports `SETUP NEEDED` and the loop will offer setup before starting new work — those files are loaded by every phase, so leaving them as templates is what produces generic output.
@@ -132,7 +132,7 @@ tests/            pytest suite over the vault tooling
 
 **IDs are allocated, not guessed.** Two agents eyeballing "the next number" pick the same one.
 
-**Gates are executed, not self-assessed.** The gate table used to be prose asking the model to confirm it had met its own exit condition, which is the one party that cannot be trusted to answer. `loop gate <phase>` runs the checks. Crucially it has a `manual-review` verdict for the four gates no tool can decide — because forcing every gate into something checkable is how a green tick stops meaning anything. `not-declared` exists for the same reason: an undeclared test command is not a passing one.
+**Gates are executed, not self-assessed.** The gate table used to be prose asking the model to confirm it had met its own exit condition, which is the one party that cannot be trusted to answer. `loop gate <phase>` runs the checks. Crucially it has a `manual-review` verdict for the checks no tool can decide — because forcing every gate into something checkable is how a green tick stops meaning anything. `not-declared` exists for the same reason: an undeclared test command is not a passing one.
 
 **Declared commands are lists.** `test_command: ["pytest", "-q"]` in `context.md` goes straight to the process. A string would need a shell to interpret, and the vault is a file the model writes.
 
@@ -144,7 +144,7 @@ tests/            pytest suite over the vault tooling
 
 **Setup is not autonomous.** Reading a repo tells you what the code does, never what the team agreed. Setup drafts the first from evidence, marks it as inferred, and asks about the second.
 
-**Nothing requires anything else.** Every skill works standalone — `/agentic-loop:adr` without a plan, `/agentic-loop:diagnose` without the loop. The loop is a convenience, not a cage. (Plugin skills are namespaced by plugin name; that prefix is not optional.)
+**Nothing requires anything else.** Every skill works standalone — `/agent-pingu:adr` without a plan, `/agent-pingu:diagnose` without the loop. The loop is a convenience, not a cage. (Plugin skills are namespaced by plugin name; that prefix is not optional.)
 
 ## Tests
 

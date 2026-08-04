@@ -7,18 +7,18 @@ Brief instructions for daily use. Read once; keep the lane table handy.
 ## 1. Install
 
 ```bash
-unzip agentic-loop.zip -d ~/.claude/skills/     # personal
+unzip agent-pingu.zip -d ~/.claude/skills/     # personal
 # or: unzip into <repo>/.claude/skills/         # shared with the team via git
 ```
 
-Restart Claude Code. Confirm with `claude plugin list` — you should see `agentic-loop@skills-dir`.
+Restart Claude Code. Confirm with `claude plugin list` — you should see `agent-pingu@skills-dir`.
 
 ## 2. Set up a repo
 
 From the repo root:
 
 ```bash
-~/.claude/skills/agentic-loop/scripts/vault_init.sh
+~/.claude/skills/agent-pingu/scripts/vault_init.sh
 ```
 
 This creates `docs/vault/` and never overwrites anything that already exists, so it's safe to re-run.
@@ -55,7 +55,7 @@ Just describe the work. The loop picks the lane.
 | "implement T-0042" | runs one task |
 | "is this ready?" | verification and the review packet |
 
-You can also call any piece directly — `/agentic-loop:adr`, `/agentic-loop:diagnose`, `/agentic-loop:grilling`, `/agentic-loop:domain-modeling` — without running the whole loop. Plugin skills are namespaced by plugin name, so the prefix is required; type `/agentic-loop:` and the picker will list them. Nothing here requires anything else.
+You can also call any piece directly — `/agent-pingu:adr`, `/agent-pingu:diagnose`, `/agent-pingu:grilling`, `/agent-pingu:domain-modeling` — without running the whole loop. Plugin skills are namespaced by plugin name, so the prefix is required; type `/agent-pingu:` and the picker will list them. Nothing here requires anything else.
 
 ## 4. What a full run does
 
@@ -72,7 +72,7 @@ place, so there is nothing for `install` to act on. If you would rather edit the
 file, the value lives in `~/.claude/settings.json`:
 
 ```json
-{ "pluginConfigs": { "agentic-loop@skills-dir": { "options": { "autonomy": "gated" } } } }
+{ "pluginConfigs": { "agent-pingu@skills-dir": { "options": { "autonomy": "gated" } } } }
 ```
 
 ## 5. The agents
