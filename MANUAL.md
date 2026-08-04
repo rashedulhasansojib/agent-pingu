@@ -99,6 +99,7 @@ Delegated automatically; you can also ask for one by name.
 ```bash
 loop status              # lane, phase, blockers, unsynced tasks
 loop doctor              # validate the vault before a PR
+loop gate [phase]        # evaluate a phase's exit condition
 loop next-id task        # allocate an ID safely
 loop new adr "Title"     # scaffold a note, print its path
 
@@ -112,6 +113,34 @@ These are on the PATH while the plugin is enabled. The implementations live in `
 `doctor` catches duplicate IDs, unknown statuses, broken wikilinks, and tasks pointing at epics that don't exist. Run it before opening a PR; these are the failures that silently break the board.
 
 `status` reads the `work_type` on the most recently updated note to decide which lane it is reporting against, so a chore stays a chore across sessions instead of looking like a stalled feature.
+
+### Gates
+
+`loop gate <phase>` evaluates a phase's exit condition instead of asking the model whether it met its own. Every check comes back as one of:
+
+| | |
+|---|---|
+| `passed` / `failed` | Actually checked. A `failed` stops the phase. |
+| `planned` | A command gate, not run. This is the default — running your test suite is a side effect, so you ask for it with `--execute`. |
+| `not-declared` | A command gate whose command the vault never declared. **Not a pass.** |
+| `manual-review` | No tool can decide this. Never auto-passes. |
+
+```bash
+loop gate                # gate whatever phase status infers
+loop gate verify         # show what would run
+loop gate verify --execute
+```
+
+Four of the nine gates are genuinely human judgement, so most phases end with checks still outstanding. That is the intended answer — a green tick that meant "the model said so" is what this replaces.
+
+For the command gates, declare the commands in `context.md`'s frontmatter:
+
+```yaml
+test_command: ["pytest", "-q"]
+lint_command: ["ruff", "check", "."]
+```
+
+Setup fills these in from your test config and CI. **JSON lists, not strings** — a list is passed straight to the process and never reaches a shell, so nothing in your vault can turn into `&& rm -rf`. A string is rejected with a message telling you to use a list.
 
 ### Pushing to a public repo
 

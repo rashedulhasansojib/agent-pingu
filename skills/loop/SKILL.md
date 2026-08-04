@@ -77,6 +77,16 @@ Call `security-reviewer` without being asked whenever a change touches authentic
 
 Each phase has an exit condition. A phase that has not met its gate does not advance, even under full autonomy — the gates are what make autonomy safe.
 
+Run `loop gate <phase>` at the end of every phase. Do not assess your own gate; that is the thing this command exists to replace. It plans by default and runs the vault's declared commands with `--execute`, reporting each check as one of:
+
+- `passed` / `failed` — checked. A `failed` means the phase does not advance. Fix it or write a `blocked` note.
+- `not-declared` — a command gate whose command the vault never declared. Not a pass. `verify` needs `test_command` in `context.md`'s frontmatter; if it is missing, say so rather than skipping the check.
+- `manual-review` — no tool can decide this one. State plainly what you did and what the human still has to confirm. Never report it as met.
+
+`loop gate` with no phase gates whatever `loop status` currently infers.
+
+The command is honest rather than reassuring: on most phases it will end with checks still outstanding. That is the correct answer, not a shortfall — four of the nine gates below are genuinely human judgement.
+
 | Phase | Cannot advance until |
 |---|---|
 | setup | Standards, context, and glossary are `status: ready`, and the human has reviewed them |

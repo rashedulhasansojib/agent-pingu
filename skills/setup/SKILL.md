@@ -63,6 +63,17 @@ Write only what you have grounds for. A short standards file that is entirely tr
 
 Keep `context.md` to pointers and orientation, not prose. Its job is to let a phase find the three notes it needs, and to tell an agent how to run the tests.
 
+Write the test and lint commands into `context.md`'s frontmatter as well, as JSON lists:
+
+```yaml
+test_command: ["pytest", "-q"]
+lint_command: ["ruff", "check", "."]
+```
+
+You already found these while reading the test config and CI. This is the same fact in a form a script can use: `loop gate verify` runs `test_command`, and with the field empty it reports `not-declared` rather than passing. Lists, never strings — a list cannot reach a shell.
+
+Prefer the command CI runs over the one the README suggests. If they differ, that is worth mentioning to the person: one of the two is stale.
+
 ## Finish
 
 Run `loop doctor`, then show the person what you wrote — the standards file especially, since it will shape every future run. Ask them to correct anything you inferred wrongly. Getting one rule wrong here propagates into everything the loop produces afterwards, so this review is worth the interruption.

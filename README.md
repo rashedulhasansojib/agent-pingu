@@ -58,7 +58,7 @@ agents/
   reviewer-standards  reviewer-spec
 
 bin/              on the Bash tool's PATH, so skills call these by name
-  loop           status | doctor | next-id | new
+  loop           status | doctor | gate | next-id | new
   gh-sync        push | status | pull
   vault-init     scaffolds docs/vault/
 
@@ -79,6 +79,10 @@ tests/            pytest suite over the vault tooling
 **One task, one file.** A concurrency decision. Parallel agents touch different files, so git merges cleanly.
 
 **IDs are allocated, not guessed.** Two agents eyeballing "the next number" pick the same one.
+
+**Gates are executed, not self-assessed.** The gate table used to be prose asking the model to confirm it had met its own exit condition, which is the one party that cannot be trusted to answer. `loop gate <phase>` runs the checks. Crucially it has a `manual-review` verdict for the four gates no tool can decide — because forcing every gate into something checkable is how a green tick stops meaning anything. `not-declared` exists for the same reason: an undeclared test command is not a passing one.
+
+**Declared commands are lists.** `test_command: ["pytest", "-q"]` in `context.md` goes straight to the process. A string would need a shell to interpret, and the vault is a file the model writes.
 
 **Read-only agents get a `tools:` allowlist; the two open-ended ones don't.** `architect` and the three reviewers deny by default, which is the honest shape for a role whose whole output is a report. `senior-engineer` and `sqa` stay on inheritance on purpose: an allowlist strips every MCP tool as well as built-ins, and those two work in someone else's repo where a project's MCP server may be exactly what they need.
 

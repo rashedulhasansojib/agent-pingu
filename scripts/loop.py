@@ -7,7 +7,10 @@ Invoked as `loop <command>` — bin/loop puts this on the Bash tool's PATH.
   loop next-id <type>      allocate the next free ID (task|adr|epic|research|retro)
   loop new <type> <title>  scaffold a note with correct frontmatter, print its path
   loop doctor              validate the vault: duplicate IDs, bad status,
-                           broken wikilinks, orphaned tasks
+                           broken wikilinks, orphaned tasks, missing fields
+  loop gate [<phase>]      evaluate a phase's exit condition. Plans by default;
+                           --execute runs the commands context.md declares.
+                           Defaults to the phase status infers.
 
 Config, read from the environment:
   CLAUDE_PROJECT_DIR              repo root. Exported to hook processes only, so
@@ -19,16 +22,19 @@ No third-party dependencies, so it runs wherever Python 3 does. The tests need
 pytest; the tooling itself does not.
 """
 
+import json
 import os
 import re
 import subprocess
 import sys
+from collections import namedtuple
 from datetime import date
 from pathlib import Path
 
 SCALAR_KEYS = (
     "type", "id", "status", "title", "epic", "gh_issue",
     "owner", "updated", "created", "work_type",
+    "test_command", "lint_command",
 )
 
 # Where parse_frontmatter records every key a note declared, including the list
@@ -452,14 +458,277 @@ def cmd_doctor(vault):
     return 1
 
 
+# ------------------------------------------------------------------------ gates
+
+# A gate is a list of checks, each of one of three kinds:
+#
+#   vault   — computed from the notes on disk. Deterministic and always runnable.
+#   command — runs a command the vault declares in context.md's frontmatter.
+#   manual  — a judgement no tool can make. Never auto-passes, ever.
+#
+# The third kind is the one that makes the other two trustworthy. Without it
+# every gate has to be forced into something checkable, and "the model said the
+# acceptance criteria were met" quietly becomes a green tick.
+Check = namedtuple("Check", "kind name detail")
+
+
+def note_body(path):
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            return text[end + 4:]
+    return text
+
+
+def section(body, heading):
+    """The text under a `## heading`, or None when absent. Empty means None too —
+    a heading with nothing under it is the failure this is looking for."""
+    match = re.search(
+        rf"^##\s+{re.escape(heading)}\s*$(.*?)(?=^##\s|\Z)", body, re.MULTILINE | re.DOTALL)
+    return (match.group(1).strip() or None) if match else None
+
+
+def _gate_setup(notes, vault):
+    todo = unfilled(notes)
+    if todo:
+        return False, "still templates: " + ", ".join(sorted(n["path"].name for n in todo))
+    return True, "no note is still a template"
+
+
+def _gate_brief(notes, vault):
+    briefs = [n for n in notes if n["type"] == "brief"]
+    if not briefs:
+        return False, "no brief exists yet"
+    body = note_body(newest(briefs)["path"])
+    missing = [h for h in ("Success criteria", "Non-goals") if not section(body, h)]
+    if missing:
+        return False, "empty or absent: " + ", ".join(missing)
+    # Deliberately only checks that the sections have content. Whether that
+    # content is any good is a manual judgement, and pretending otherwise would
+    # be the exact self-certification these gates exist to remove.
+    return True, "success criteria and non-goals both have content"
+
+
+def _gate_research(notes, vault):
+    open_questions = [n for n in notes if n["type"] == "research"
+                      and n.get("status") not in ("done", "deferred")]
+    if open_questions:
+        return False, "still open: " + ", ".join(str(n.get("id")) for n in open_questions)
+    return True, "every research note is answered or deferred"
+
+
+def _gate_plan(notes, vault):
+    tasks = [n for n in notes if n["type"] == "task"]
+    if not tasks:
+        return False, "no tasks have been cut yet"
+    problems = []
+    for task in tasks:
+        if not task.get("epic"):
+            problems.append(f"{task.get('id')} links to no epic")
+        criteria = section(note_body(task["path"]), "Acceptance criteria")
+        if not criteria or "- [" not in criteria:
+            problems.append(f"{task.get('id')} has no acceptance criteria")
+    if problems:
+        return False, "; ".join(problems)
+    return True, f"all {len(tasks)} task(s) have criteria and an epic"
+
+
+def _gate_execute(notes, vault):
+    tasks = [n for n in notes if n["type"] == "task"]
+    if not tasks:
+        return False, "no tasks to execute"
+    remaining = [t for t in tasks if t.get("status") not in ("review", "done")]
+    if remaining:
+        return False, "not yet at review: " + ", ".join(str(t.get("id")) for t in remaining)
+    return True, f"all {len(tasks)} task(s) reached review or done"
+
+
+def _gate_retro(notes, vault):
+    if not [n for n in notes if n["type"] == "retro"]:
+        return False, "no retro note written"
+    return True, "a retro note exists"
+
+
+# Mirrors the gate table in skills/loop/SKILL.md. tests/test_skills.py holds the
+# two in step, the same way it does for LANES.
+GATES = {
+    "setup": (
+        Check("vault", "standards, context and glossary are filled in", _gate_setup),
+        Check("manual", "a human has reviewed what setup inferred",
+              "Setup marks lines inferred vs agreed. Someone has to read them."),
+    ),
+    "talk": (
+        Check("vault", "brief states success criteria and non-goals", _gate_brief),
+    ),
+    "research": (
+        Check("vault", "every open question is answered or deferred", _gate_research),
+    ),
+    "adr": (
+        Check("manual", "every decision constraining the plan is accepted",
+              "Which decisions constrain the plan cannot be read off disk."),
+    ),
+    "plan": (
+        Check("vault", "every task has acceptance criteria and an epic", _gate_plan),
+    ),
+    "diagnose": (
+        Check("manual", "root cause identified and reproduced by a failing test",
+              "A test that fails for the right reason. Only a human can say."),
+    ),
+    "execute": (
+        Check("vault", "every task has reached review or done", _gate_execute),
+        Check("command", "test suite passes", "test_command"),
+        Check("manual", "acceptance criteria genuinely met, not approximately",
+              "Check each criterion against the code, not the task's status field."),
+    ),
+    "verify": (
+        Check("command", "test suite passes", "test_command"),
+        Check("manual", "reviews returned with no blocking findings",
+              "The four reviewers ran and their blocking findings are closed."),
+    ),
+    "retro": (
+        Check("vault", "a retro note exists", _gate_retro),
+        Check("manual", "learnings written back into standards, patterns or glossary",
+              "A retro nobody acted on is a diary entry."),
+    ),
+}
+
+
+def declared_command(vault, key):
+    """(argv, error) for a command the vault declares in context.md frontmatter.
+
+    Declared as a JSON list, never a string. A string would invite
+    `npm test && deploy` and the only way to honour that is a shell, which is
+    the one thing a gate runner must not hand someone else's file.
+    """
+    raw = parse_frontmatter(vault / "context.md").get(key)
+    if not raw:
+        return None, f"no {key} declared in context.md frontmatter"
+    example = '["pytest", "-q"]'
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None, f"{key} must be a JSON list of arguments, e.g. {example}"
+    if not isinstance(value, list) or not value or not all(isinstance(v, str) for v in value):
+        return None, f"{key} must be a non-empty JSON list of strings, e.g. {example}"
+    return value, None
+
+
+def run_command_check(vault, key, timeout=900):
+    argv, error = declared_command(vault, key)
+    if error:
+        return {"status": "not-declared", "detail": error}
+    try:
+        completed = subprocess.run(
+            argv, cwd=repo_root(), stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return {"status": "failed", "command": argv,
+                "detail": f"timed out after {timeout}s"}
+    except OSError as exc:
+        return {"status": "failed", "command": argv, "detail": str(exc)}
+    return {
+        "status": "passed" if completed.returncode == 0 else "failed",
+        "command": argv,
+        "detail": f"exit code {completed.returncode}",
+        "stdout_tail": completed.stdout[-2000:],
+        "stderr_tail": completed.stderr[-2000:],
+    }
+
+
+def run_gate(vault, phase, execute=False):
+    """Evaluate one phase's gate. Plans command checks unless execute is set."""
+    notes = load_notes(vault)
+    checks = []
+    for check in GATES[phase]:
+        if check.kind == "manual":
+            checks.append({"name": check.name, "kind": "manual",
+                           "status": "manual-review", "detail": check.detail})
+        elif check.kind == "vault":
+            met, detail = check.detail(notes, vault)
+            checks.append({"name": check.name, "kind": "vault",
+                           "status": "passed" if met else "failed", "detail": detail})
+        elif execute:
+            checks.append({"name": check.name, "kind": "command",
+                           **run_command_check(vault, check.detail)})
+        else:
+            argv, error = declared_command(vault, check.detail)
+            checks.append({"name": check.name, "kind": "command",
+                           "status": "not-declared" if error else "planned",
+                           "detail": error or "would run: " + " ".join(argv)})
+
+    failed = [c["name"] for c in checks if c["status"] == "failed"]
+    pending = [c["name"] for c in checks
+               if c["status"] in ("manual-review", "planned", "not-declared")]
+    return {
+        "phase": phase,
+        "executed": execute,
+        "checks": checks,
+        "failed": failed,
+        "pending": pending,
+        # ok: nothing this run could check is broken.
+        # ready: everything was actually checked and nothing is outstanding.
+        # Keeping them apart is the point — "not yet verified" is not "fine".
+        #
+        # `ready` does not also require execute=True: an unrun command already
+        # lands in `pending` as "planned". Requiring the flag would report a
+        # gate that declares no commands at all — talk, plan, research — as
+        # unmet no matter what, which is a lie in the safe direction but still
+        # a lie.
+        "ok": not failed,
+        "ready": not failed and not pending,
+    }
+
+
+def cmd_gate(vault, phase, execute):
+    if not vault.is_dir():
+        print(f"[gate] no vault at {vault}")
+        return 1
+    if phase is None:
+        phase, why = infer_phase(load_notes(vault))
+        if phase not in GATES:
+            print(f"[gate] phase is '{phase}' ({why}) — nothing left to gate")
+            return 0
+    if phase not in GATES:
+        print(f"unknown phase '{phase}' — one of: {', '.join(GATES)}", file=sys.stderr)
+        return 1
+
+    result = run_gate(vault, phase, execute=execute)
+    print(f"[gate] {phase}   ({'executed' if execute else 'planned'})")
+    for check in result["checks"]:
+        print(f"  {check['status']:<14} {check['name']}")
+        if check.get("detail"):
+            print(f"  {'':<14} {check['detail']}")
+        tail = (check.get("stderr_tail") or check.get("stdout_tail") or "").strip()
+        if check["status"] == "failed" and tail:
+            for line in tail.splitlines()[-5:]:
+                print(f"  {'':<14} | {line}")
+
+    if result["failed"]:
+        print(f"[gate] BLOCKED — {len(result['failed'])} check(s) failed; the phase does not advance")
+    elif result["ready"]:
+        print("[gate] all checks passed")
+    else:
+        print(f"[gate] {len(result['pending'])} check(s) still outstanding — the gate is not met yet")
+        print("[gate] manual-review means not verified by tooling; a human confirms those")
+        if not execute:
+            print("[gate] re-run with --execute to run the declared commands")
+    return 1 if result["failed"] else 0
+
+
 # ------------------------------------------------------------------------- main
 
 def main(argv):
+    execute = "--execute" in argv
+    argv = [a for a in argv if a != "--execute"]
     if len(argv) < 2:
         print(__doc__)
         return 1
     cmd, vault = argv[1], vault_path()
 
+    if cmd == "gate":
+        return cmd_gate(vault, argv[2] if len(argv) > 2 else None, execute)
     if cmd == "status":
         return cmd_status(vault)
     if cmd == "doctor":

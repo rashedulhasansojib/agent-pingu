@@ -225,3 +225,36 @@ def test_the_blind_reviewers_preload_nothing(name):
     """Preloading `vault` would hand both reviewers a map to `brief.md`. The
     separation is already only a convention; do not spend it for convenience."""
     assert not agent_frontmatter(name).get("skills")
+
+
+# ------------------------------------------------------------------ gate table
+
+def gate_table():
+    """The phases listed in loop/SKILL.md's gate table, in order."""
+    text = (PLUGIN_ROOT / "skills" / "loop" / "SKILL.md").read_text(encoding="utf-8")
+    section = re.search(r"^## Gates$(.*?)^## ", text, re.MULTILINE | re.DOTALL)
+    assert section, "loop/SKILL.md no longer has a '## Gates' section"
+    rows = re.findall(r"^\|\s*(\w[\w-]*)\s*\|", section.group(1), re.MULTILINE)
+    return [r for r in rows if r != "Phase"]
+
+
+def test_the_gate_table_is_parseable_at_all():
+    assert len(gate_table()) == 9, f"parsed {gate_table()}"
+
+
+def test_every_documented_gate_is_declared_in_code():
+    """`loop gate <phase>` must cover exactly the phases the table promises.
+    A documented gate with no declaration is the state this whole feature
+    existed to end."""
+    import loop as loop_py
+
+    assert gate_table() == list(loop_py.GATES)
+
+
+def test_the_skill_points_at_the_runner_rather_than_asking_for_self_assessment():
+    """The gate section used to instruct the model to decide whether its own
+    gate was met. It has to name the command instead."""
+    text = (PLUGIN_ROOT / "skills" / "loop" / "SKILL.md").read_text(encoding="utf-8")
+    section = re.search(r"^## Gates$(.*?)^## ", text, re.MULTILINE | re.DOTALL).group(1)
+
+    assert "loop gate" in section
