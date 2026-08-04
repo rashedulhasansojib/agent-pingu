@@ -5,11 +5,12 @@ Every command and every output below is real, taken from building
 wrong, it is left in — that is the part worth reading.
 
 - [1. Install, once per machine](#1-install-once-per-machine)
-- [2. Starting a new project](#2-starting-a-new-project)
-- [3. The full flow, phase by phase](#3-the-full-flow-phase-by-phase)
-- [4. When something goes wrong mid-run](#4-when-something-goes-wrong-mid-run)
-- [5. Command reference](#5-command-reference)
-- [6. Gotchas worth knowing before you hit them](#6-gotchas-worth-knowing-before-you-hit-them)
+- [2. Check it works](#2-check-it-works)
+- [3. Starting a new project](#3-starting-a-new-project)
+- [4. The full flow, phase by phase](#4-the-full-flow-phase-by-phase)
+- [5. When something goes wrong mid-run](#5-when-something-goes-wrong-mid-run)
+- [6. Command reference](#6-command-reference)
+- [7. Gotchas worth knowing before you hit them](#7-gotchas-worth-knowing-before-you-hit-them)
 
 ---
 
@@ -61,7 +62,79 @@ and it only loads when Claude Code starts from that directory.
 
 ---
 
-## 2. Starting a new project
+## 2. Check it works
+
+Paste this into **bash or zsh** — it runs identically in both. Every command it
+runs is read-only; none of them touch your vault.
+
+```bash
+check() {
+  out=$("$@" 2>&1); rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf '  ok         %s\n' "$*"
+  else
+    [ "$rc" -eq 127 ] && rc="not found"
+    printf '  %-10s %s\n' "$rc" "$*"
+    printf '%s\n' "$out" | sed 's/^/             /'
+  fi
+}
+
+check pingu status
+check pingu doctor
+check pingu gate plan
+check pingu gate verify
+```
+
+In a repo with a filled-in vault you should see:
+
+```
+  ok         pingu status
+  ok         pingu doctor
+  ok         pingu gate plan
+  ok         pingu gate verify
+```
+
+Anything else prints the reason underneath it, which is the point:
+
+```
+  not found  pingu status
+             zsh: command not found: pingu
+```
+
+### Why the helper is shaped like that
+
+Two mistakes are easy here, and both were made while writing this document.
+
+**Pass the arguments, never a command string.** The obvious version is a loop
+over strings:
+
+```bash
+for c in "gate plan" "next-id task"; do pingu $c; done   # broken in zsh
+```
+
+bash splits `$c` into two words. **zsh does not** — `pingu` receives the single
+argument `gate plan` and exits 127, which looks exactly like the tool being
+missing. `${=c}` splits in zsh but then mangles quoted arguments, turning
+`new task "buy milk"` into four. Forwarding real arguments with `"$@"` is
+correct in both shells and needs no `eval`.
+
+**Never discard stderr.** `cmd >/dev/null 2>&1 && echo ok || echo "rc=$?"`
+throws away *why* it failed, so `127` (not installed) and `1` (a gate that
+legitimately did not pass) look identical. The helper above prints the captured
+output on failure, which is what turns a mystery into a one-line diagnosis.
+
+### If a check fails
+
+| Output | Means |
+|---|---|
+| `not found` | The plugin loaded after this shell started. Restart Claude Code. |
+| `rc=1` on `doctor` | Either there is no vault in this repo — run `vault-init` — or the vault has a real problem. The output says which. |
+| `rc=1` on `gate …` | The gate genuinely is not met. That is the gate working, not a fault. |
+| `ok` on `status`, but it prints `no vault` | Expected. `status` exits 0 even with no vault, because it runs on every session start and a missing vault is not an error. |
+
+---
+
+## 3. Starting a new project
 
 ```bash
 mkdir my-project && cd my-project && git init
@@ -122,7 +195,7 @@ the gate reports `not-declared`, which is not a pass.
 
 ---
 
-## 3. The full flow, phase by phase
+## 4. The full flow, phase by phase
 
 Describe the work in plain language. The router picks a lane; you do not name it.
 
@@ -242,7 +315,7 @@ vault ok — 14 notes, no problems found
 
 ---
 
-## 4. When something goes wrong mid-run
+## 5. When something goes wrong mid-run
 
 Both of these happened while building the example. Neither is a malfunction —
 the first is the loop working, the second is the reason its standards exist.
@@ -282,7 +355,7 @@ inherits it — that is the whole point of retro.
 
 ---
 
-## 5. Command reference
+## 6. Command reference
 
 ```bash
 pingu status              # lane, phase, blockers, unsynced tasks
@@ -315,7 +388,7 @@ shortfall.
 
 ---
 
-## 6. Gotchas worth knowing before you hit them
+## 7. Gotchas worth knowing before you hit them
 
 **`pingu: command not found`** — `bin/` joins the PATH only for sessions started
 after the plugin loaded. Restart Claude Code.
