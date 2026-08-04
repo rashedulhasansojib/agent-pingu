@@ -131,9 +131,17 @@ it in `<repo>/.claude/settings.json` and commit it**, so everyone on the repo ru
 at the same autonomy instead of whatever each person happens to have set
 personally. `settings.local.json` is the per-person override on top.
 
-The same three files supply `vault_dir` and `gh_repo`. An unrecognised value is
-reported and falls back to the default rather than being silently accepted — a
-typo'd `Gated` is how somebody runs unattended for a week believing otherwise.
+The same three files supply `vault_dir` and `gh_repo`. Only `autonomy` is
+validated — it has a fixed vocabulary, so a typo'd `Gated` is reported and falls
+back rather than being silently accepted, which is how somebody runs unattended
+for a week believing otherwise. A repo may *tighten* autonomy to `gated`; it
+cannot loosen a `gated` you set personally, because a committed settings file is
+the less trusted source.
+
+`vault_dir` and `gh_repo` have no vocabulary to check against, so they are taken
+as given — a typo surfaces as "no vault at …" or as a `gh` error. `vault_dir` is
+constrained in one way only: it must resolve inside the repo, which is what
+plugin.json already says it is.
 
 ## 6. The agents
 

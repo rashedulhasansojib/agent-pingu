@@ -17,7 +17,13 @@ import sys
 import pingu
 from conftest import PLUGIN_ROOT
 
-CONCURRENCY = 8
+# The sqa reviewer reintroduced the original max+1 bug and ran the concurrency
+# tests fifteen times: all three passed on 3 of 15 runs. Eight processes on a
+# fast local filesystem do not reliably force the interleaving, and CI runs this
+# once per push — so a regression had roughly a 1-in-5 chance of going unnoticed.
+# The deterministic guard is in test_review_findings.py; this raises the odds
+# that the end-to-end version fails too rather than relying on scheduling luck.
+CONCURRENCY = 24
 
 
 def spawn(repo, *argv):
@@ -92,13 +98,10 @@ def test_allocation_does_not_degrade_behind_many_outstanding_reservations(vault)
     assert pingu.allocate_id(vault, "task") == "T-1201"
 
 
-def test_spent_reservations_are_pruned(vault):
-    """Otherwise the directory grows one file per ID for the life of the repo."""
-    nid = pingu.allocate_id(vault, "task")
-    (vault / "tasks" / f"{nid}-thing.md").write_text(
-        f"---\ntype: task\nid: {nid}\n---\n", encoding="utf-8")
-    pingu.allocate_id(vault, "task")
-    assert not (vault / pingu.RESERVED_DIR / nid).exists()
+# Reservations were pruned once their note existed, to keep the directory
+# bounded. That reopened the race — see
+# tests/test_review_findings.py::test_a_stale_scan_cannot_reclaim_an_id_a_note_already_holds
+# and the replacement, test_a_spent_reservation_is_kept_as_the_high_water_mark.
 
 
 # --------------------------------------------------------------- concurrency

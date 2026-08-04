@@ -33,8 +33,11 @@ def home(tmp_path, monkeypatch):
     fake = tmp_path / "home"
     fake.mkdir()
     monkeypatch.setenv("HOME", str(fake))
-    monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_AUTONOMY", raising=False)
-    monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_VAULT_DIR", raising=False)
+    # Every option, not the two that happened to be under test: plugin_option
+    # checks the env var first, so an ambient CLAUDE_PLUGIN_OPTION_GH_REPO made
+    # test_no_gh_repo_means_gh_uses_the_git_remote fail against a clean repo.
+    for option in ("AUTONOMY", "VAULT_DIR", "GH_REPO"):
+        monkeypatch.delenv(f"CLAUDE_PLUGIN_OPTION_{option}", raising=False)
     return fake
 
 

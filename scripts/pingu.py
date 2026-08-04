@@ -132,22 +132,28 @@ AUTONOMY_LEVELS = ("full-loop", "gated")
 DEFAULT_AUTONOMY = "full-loop"
 
 
-def settings_files():
+def settings_files(scope="all"):
     """Where a plugin option can be declared, most specific first.
 
     Mirrors Claude Code's own settings precedence, minus the enterprise policy
     file — that one is for administrators pinning behaviour, and this plugin has
     no business reading it.
+
+    `scope="user"` returns only the personal file, for the one setting where the
+    repo is the less trusted source rather than the more specific one.
     """
     root = repo_root()
+    personal = Path.home() / ".claude" / "settings.json"
+    if scope == "user":
+        return (personal,)
     return (
         root / ".claude" / "settings.local.json",
         root / ".claude" / "settings.json",
-        Path.home() / ".claude" / "settings.json",
+        personal,
     )
 
 
-def plugin_option(key, default=None):
+def plugin_option(key, default=None, scope="all"):
     """Resolve one of plugin.json's userConfig options.
 
     The two obvious routes both turn out to be fiction, verified against a real
@@ -168,7 +174,7 @@ def plugin_option(key, default=None):
     if env:
         return env
 
-    for path in settings_files():
+    for path in settings_files(scope):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError, UnicodeDecodeError):
@@ -198,13 +204,44 @@ def autonomy():
     a week believing they had asked to be stopped at every phase.
     """
     raw = plugin_option("autonomy", DEFAULT_AUTONOMY)
-    if raw in AUTONOMY_LEVELS:
-        return raw, None
-    return DEFAULT_AUTONOMY, raw
+    if raw not in AUTONOMY_LEVELS:
+        return DEFAULT_AUTONOMY, raw
+
+    # A repo may tighten autonomy; it may not loosen it. Repo-local settings
+    # outrank the user's own, and MANUAL tells teams to commit that file — so
+    # without this a PR branch could return someone who chose `gated` to
+    # `full-loop`, removing the per-phase stop they asked for. Advisory rather
+    # than enforced (the level is a string the model reads), but a
+    # security-relevant setting whose least-trusted source wins is backwards.
+    personal = plugin_option("autonomy", DEFAULT_AUTONOMY, scope="user")
+    if personal == "gated" and raw != "gated":
+        return "gated", None
+    return raw, None
 
 
 def vault_path():
-    return repo_root() / plugin_option("vault_dir", "docs/vault")
+    """The vault directory, always inside the repo.
+
+    `repo_root() / value` discards the base entirely when the value is absolute,
+    and nothing rejected `..` — so a committed `.claude/settings.json` could
+    point the vault at `/etc`, or anywhere else on the machine. No interaction
+    was needed to trigger it: checking out a contributor's branch is enough,
+    because the SessionStart hook runs `pingu status` unprompted, and with
+    `vault_dir: "/"` that walks and reads every markdown file on the disk.
+
+    plugin.json already documents the option as "relative to the repo root".
+    This is that promise, enforced.
+    """
+    root = repo_root()
+    declared = plugin_option("vault_dir", "docs/vault")
+    candidate = (root / declared).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError:
+        print(f"[pingu] ignoring vault_dir {declared!r}: it resolves outside the repo "
+              f"({candidate}). Using docs/vault.", file=sys.stderr)
+        return root / "docs/vault"
+    return root / declared
 
 
 def parse_frontmatter(path):
@@ -455,12 +492,35 @@ def _reservations(vault):
         current = ""
     if RESERVED_DIR not in current:
         prefix = "" if not current or current.endswith("\n") else "\n"
-        ignore.write_text(
-            f"{current}{prefix}# ID reservations — a local mutex, not shared state\n"
-            f"{RESERVED_DIR}/\n",
-            encoding="utf-8",
-        )
+        body = (f"{current}{prefix}# ID reservations — a local mutex, not shared state\n"
+                f"{RESERVED_DIR}/\n")
+        # O_NOFOLLOW: `write_text` follows a symlink, and a PR branch can commit
+        # both the settings naming a vault_dir and a symlinked .gitignore inside
+        # it. The text appended is fixed, so this is file corruption rather than
+        # execution — but it should not write through a link at all.
+        try:
+            fd = os.open(str(ignore), os.O_CREAT | os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+        except OSError:
+            pass  # A symlink, or an unwritable vault. Reservations still work.
+        else:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(body)
     return path
+
+
+def ids_on_disk(vault, prefix):
+    """Every ID of this type a note currently claims, read fresh.
+
+    Reads the notes rather than matching filenames: the convention is
+    `<ID>-<slug>.md`, but nothing enforces it at write time, and a hand-written
+    note is exactly the one whose ID a globbing check would miss.
+    """
+    found = set()
+    for note in load_notes(vault):
+        nid = note.get("id") or ""
+        if re.fullmatch(rf"{prefix}-\d+", nid):
+            found.add(nid)
+    return found
 
 
 def allocate_id(vault, kind, attempts=1000):
@@ -471,6 +531,15 @@ def allocate_id(vault, kind, attempts=1000):
     about — eight concurrent `pingu new task` calls produced two pairs of
     duplicates. O_EXCL is the fix: whoever creates the marker file owns the ID,
     and the loser of the race walks forward to the next one.
+
+    Winning the marker is not sufficient on its own, which is what the first
+    version got wrong. Markers are pruned once their note exists, to keep the
+    directory bounded — and a marker is the only evidence a concurrent caller
+    holding a stale `load_notes()` snapshot has that an ID is gone. Pruning let
+    that caller recompute a low high-water mark and re-claim a live ID: 1 in 30
+    trials of sixteen concurrent `pingu new task`. So a claim is confirmed
+    against a *fresh* read of the notes before it is handed out. That is the
+    load-bearing step; pruning is safe only because of it.
 
     This is a mutex within one working tree, which is the case the design
     encourages by running agents in parallel. Two people in separate clones can
@@ -491,8 +560,9 @@ def allocate_id(vault, kind, attempts=1000):
         match = re.fullmatch(rf"{prefix}-(\d+)", marker.name)
         if not match:
             continue
-        # A reservation whose note now exists has been spent. Dropping it here
-        # keeps the directory bounded instead of growing one file per ID forever.
+        # Safe to prune a reservation whose note exists, but only because the
+        # confirm step below re-reads the notes. Pruning alone reopened the race
+        # this closes: the marker is the evidence a stale caller relies on.
         if int(match.group(1)) in taken:
             try:
                 marker.unlink()
@@ -512,7 +582,9 @@ def allocate_id(vault, kind, attempts=1000):
         except OSError:
             # An unwritable vault should not silently hand out a colliding ID.
             raise
-        return nid
+        if nid not in ids_on_disk(vault, prefix):
+            return nid
+        number += 1
     raise RuntimeError(f"could not allocate a {kind} ID after {attempts} attempts")
 
 
@@ -540,7 +612,12 @@ def yaml_quoted(value):
     stray one would otherwise end the frontmatter block early.
     """
     text = " ".join(str(value).split())
-    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    text = text.replace("\\", "\\\\").replace('"', '\\"')
+    # C0 control characters are rejected outright by a real YAML parser, which
+    # is the same "pingu writes it, Obsidian drops it" failure this exists to
+    # prevent. An escape sequence in a title is unremarkable in a terminal.
+    text = "".join(c if c >= " " or c == "\t" else "\\x%02x" % ord(c) for c in text)
+    return '"' + text + '"'
 
 
 def yaml_scalar(value):
@@ -572,7 +649,7 @@ owner: unassigned
 updated: {today}
 ---
 
-# {title}
+# {heading}
 
 """
 
@@ -595,8 +672,10 @@ def cmd_new(vault, kind, title):
         print(f"refusing to overwrite {path}", file=sys.stderr)
         return 1
     path.write_text(
+        # Two slots, two encodings: the frontmatter value is YAML and must be
+        # quoted, the H1 below it is plain markdown and must not be.
         TEMPLATE.format(
-            kind=kind, nid=nid, title=yaml_quoted(title),
+            kind=kind, nid=nid, title=yaml_quoted(title), heading=title,
             status=INITIAL_STATUS.get(kind, "todo"),
             extra=EXTRA.get(kind, ""), today=date.today().isoformat(),
         ),
