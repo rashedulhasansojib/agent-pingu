@@ -142,10 +142,14 @@ hooks/
 templates/        Obsidian templates, for writing a note by hand
   brief.md  task.md  adr.md
 
-tests/            pytest; the tooling itself has no third-party dependencies
+tests/            pytest and pyyaml; the tooling itself has no dependencies
   test_pingu.py   lanes, phase inference, doctor, vault paths
   test_gates.py   the gate runner: vault, command and manual checks
   test_gh_sync.py frontmatter parsing, the push guard, idempotency
+  test_config.py  plugin options resolving from the settings files
+  test_ids.py     ID allocation, including under real concurrency
+  test_frontmatter_yaml.py
+                  every note this plugin writes, through a strict YAML parser
   test_skills.py  docs and code agreeing — lane table vs LANES, gate table vs
                   GATES, frontmatter validity, plugin identity, this diagram
 
@@ -187,7 +191,7 @@ the `vault` skill for that tree.
 ## Tests
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install pytest
+python3 -m venv .venv && .venv/bin/pip install pytest pyyaml
 .venv/bin/python -m pytest tests/ -q
 ```
 
@@ -195,6 +199,12 @@ The suite scaffolds a real vault with `vault_init.sh` in a temp directory and
 drives the tooling against it, so it covers the two scripts agreeing on where
 the vault is and on how frontmatter parses — the places they have drifted apart
 before. `gh` is the only thing stubbed.
+
+PyYAML is a **test** dependency, not a runtime one. The tooling keeps its own
+lenient frontmatter reader precisely so a malformed note degrades instead of
+crashing a session — but that leniency is also what let it write notes no real
+YAML parser accepts, which Obsidian and Dataview then dropped from the board. The
+tests point a strict parser at everything this plugin writes.
 
 ## Extending
 

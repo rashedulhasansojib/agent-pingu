@@ -54,7 +54,7 @@ Every note carries frontmatter. Dataview queries and the tooling both depend on 
 ---
 type: task              # brief | research | adr | epic | task | run | retro | review
 id: T-0042              # stable, never reused
-title: Rate limit the public search endpoint
+title: "Rate limiting: the public search endpoint"
 status: todo            # todo | doing | blocked | review | done
                         # ADRs use: proposed | accepted | superseded
 work_type: feature      # feature | bug | refactor | spike | incident | chore
@@ -68,6 +68,8 @@ created: 2026-08-03
 updated: 2026-08-03
 ---
 ```
+
+**Quote every free-text value** — titles above all. Obsidian and Dataview parse this block as real YAML, and `title: Fix: login bug` is not valid YAML, so the note vanishes from the board. Worse, an unquoted `#` starts a comment: `title: Fix the #1 bug` silently becomes `Fix the`. `pingu new` quotes for you; when you write frontmatter by hand, quote it yourself.
 
 Run `pingu doctor` after any batch of note writing. It catches duplicate IDs, unknown statuses, broken wikilinks, and tasks orphaned from their epic — the failures that quietly break the board.
 

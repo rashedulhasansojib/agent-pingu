@@ -50,6 +50,16 @@ never triggers at runtime. No error appears. Use em dashes in descriptions, or
 quote the string. `test_frontmatter_has_no_unquoted_colon_space` and
 `claude plugin validate` are what catch this.
 
+## The lenient frontmatter reader hides its own bugs
+
+`parse_frontmatter` partitions on the first colon and never raises, which is
+right for a SessionStart hook — but it also read back notes that no real YAML
+parser accepts, so nothing noticed that `pingu new task "Fix: login bug"`
+produced a note Obsidian drops from the board, or that `#caching` in a title was
+silently truncated away. PyYAML is a test dependency for exactly this: anything
+that writes frontmatter needs a test that parses it strictly. Free-text values
+are always quoted on write, never conditionally.
+
 ## Verify against the real CLI, not just the suite
 
 Green tests have missed three real bugs here: the `ready` semantics on gates,

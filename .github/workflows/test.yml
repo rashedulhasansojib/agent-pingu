@@ -19,7 +19,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install pytest
+      # PyYAML is a *test* dependency only. The tooling ships a lenient reader
+      # with no dependencies; the tests need a strict one to catch notes that
+      # this plugin can read and Obsidian cannot.
+      - run: pip install pytest pyyaml
       - run: python -m pytest tests/ -q
 
   shell:

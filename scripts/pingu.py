@@ -231,8 +231,7 @@ def parse_frontmatter(path):
         meta[DECLARED].add(key)
         if key not in SCALAR_KEYS:
             continue
-        value = value.strip().strip('"').strip("'")
-        meta[key] = None if value in ("", "null", "~") else value
+        meta[key] = yaml_scalar(value)
     return meta
 
 
@@ -528,6 +527,40 @@ def cmd_next_id(vault, kind):
 
 # -------------------------------------------------------------------------- new
 
+def yaml_quoted(value):
+    """A free-text value as a YAML double-quoted scalar.
+
+    Always quoted, never conditionally. A predicate deciding *when* to quote is
+    one missed indicator character away from the bug this exists to fix, and the
+    two that actually bit were unremarkable: `Fix: login bug` makes the note
+    unparseable, and `#caching` is silently truncated to nothing by a YAML
+    comment. The second is worse — an error gets noticed.
+
+    Newlines collapse to spaces. A title is one line by construction, and a
+    stray one would otherwise end the frontmatter block early.
+    """
+    text = " ".join(str(value).split())
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def yaml_scalar(value):
+    """A frontmatter value as Python: the inverse of `yaml_quoted`, or None.
+
+    Quoting decides whether `null` is nil or the four-letter word — YAML says a
+    quoted scalar is always a string, and a task genuinely titled "null" should
+    not read back as an absent title.
+    """
+    text = value.strip()
+    if len(text) >= 2 and text[0] == text[-1] == '"':
+        return re.sub(r"\\(.)", r"\1", text[1:-1])
+    if len(text) >= 2 and text[0] == text[-1] == "'":
+        return text[1:-1].replace("''", "'")
+    # Unbalanced quotes: the old lenient behaviour, kept for notes written by
+    # hand and for anyone editing frontmatter in Obsidian.
+    text = text.strip('"').strip("'")
+    return None if text in ("", "null", "~") else text
+
+
 TEMPLATE = """---
 type: {kind}
 id: {nid}
@@ -563,7 +596,7 @@ def cmd_new(vault, kind, title):
         return 1
     path.write_text(
         TEMPLATE.format(
-            kind=kind, nid=nid, title=title,
+            kind=kind, nid=nid, title=yaml_quoted(title),
             status=INITIAL_STATUS.get(kind, "todo"),
             extra=EXTRA.get(kind, ""), today=date.today().isoformat(),
         ),

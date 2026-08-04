@@ -28,7 +28,7 @@ from pathlib import Path
 # One definition of where the vault is, shared with pingu.py. Two scripts each
 # resolving it their own way is how `vault_dir` ends up half-implemented.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from pingu import plugin_option, vault_path  # noqa: E402
+from pingu import plugin_option, vault_path, yaml_scalar  # noqa: E402
 
 STATUS_LABELS = {
     "todo": "pingu:todo",
@@ -67,8 +67,7 @@ def read_field(fm, key):
     match = re.search(rf"^{re.escape(key)}:[^\S\n]*(.*)$", fm, re.MULTILINE)
     if not match:
         return None
-    value = match.group(1).strip().strip('"').strip("'")
-    return None if value in ("", "null", "~") else value
+    return yaml_scalar(match.group(1))
 
 
 def write_field(path, key, value):
