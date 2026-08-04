@@ -60,7 +60,7 @@ ADR_STATUS = {"proposed", "accepted", "superseded"}
 NOTE_STATUS = {"draft", "locked", "blocked", "done", "deferred", "template", "ready"}
 
 # lane -> the phases it runs, in order. This mirrors the lane table in
-# skills/pingu/SKILL.md; change one and change the other.
+# skills/run/SKILL.md; change one and change the other.
 LANES = {
     "feature": ("talk", "research", "adr", "plan", "execute", "verify", "retro"),
     "bug": ("talk", "diagnose", "execute", "verify"),
@@ -550,7 +550,7 @@ def _gate_retro(notes, vault):
     return True, "a retro note exists"
 
 
-# Mirrors the gate table in skills/pingu/SKILL.md. tests/test_skills.py holds the
+# Mirrors the gate table in skills/run/SKILL.md. tests/test_skills.py holds the
 # two in step, the same way it does for LANES.
 GATES = {
     "setup": (

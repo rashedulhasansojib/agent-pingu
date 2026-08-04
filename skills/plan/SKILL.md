@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Decomposes an existing brief and its accepted ADRs into epics and individually executable task notes with acceptance criteria, then mirrors them to GitHub Issues. Dispatched by the `pingu` router as the planning phase; also use directly to re-cut a plan when execution proved the tasks were wrong, or when someone points at a written brief and asks for it to be sliced. Requires that brief — an undifferentiated request with nothing decided yet goes to `pingu`, which runs discovery first.
+description: Decomposes an existing brief and its accepted ADRs into epics and individually executable task notes with acceptance criteria, then mirrors them to GitHub Issues. Dispatched by the `run` router as the planning phase; also use directly to re-cut a plan when execution proved the tasks were wrong, or when someone points at a written brief and asks for it to be sliced. Requires that brief — an undifferentiated request with nothing decided yet goes to `run`, which runs discovery first.
 ---
 
 # Plan

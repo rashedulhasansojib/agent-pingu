@@ -91,7 +91,7 @@ is rejected with a message telling you to use a list.
 
 ```
 skills/
-  pingu           router — picks the lane, sequences phases, delegates
+  run             router — picks the lane, sequences phases, delegates
   vault           spine: layout, schema, IDs, context resolution
   setup           drafts standards and context by reading the repo
   talk            discovery → brief.md
@@ -122,9 +122,9 @@ tests/            pytest suite over the vault tooling
 
 ## Design decisions worth knowing
 
-**Phases versus disciplines.** Phases own artifacts and only `pingu` sequences them; disciplines own techniques and anyone can call them. Orchestrators calling orchestrators nest unpredictably, and a run you can't follow is a run you can't review.
+**Phases versus disciplines.** Phases own artifacts and only `run` sequences them; disciplines own techniques and anyone can call them. Orchestrators calling orchestrators nest unpredictably, and a run you can't follow is a run you can't review.
 
-**Only the router claims a raw request.** That invariant lives entirely in the `description` fields, because dispatch is a judgement call and nothing arbitrates it at runtime. So each phase description names the artifact it owns and the precondition it needs, and points anything vaguer at `pingu`. When `talk` or `plan` wins a request the router should have taken, the run gets no lane, no run log, and — the expensive one — no `SETUP NEEDED` gate. `tests/test_skills.py` guards this; it is the only thing that does.
+**Only the router claims a raw request.** That invariant lives entirely in the `description` fields, because dispatch is a judgement call and nothing arbitrates it at runtime. So each phase description names the artifact it owns and the precondition it needs, and points anything vaguer at `run`. When `talk` or `plan` wins a request the router should have taken, the run gets no lane, no run log, and — the expensive one — no `SETUP NEEDED` gate. `tests/test_skills.py` guards this; it is the only thing that does.
 
 **Two reviewers, deliberately blind to each other.** A reviewer holding the spec excuses sloppy code because it works; a reviewer holding the standards nitpicks code that solves the wrong problem. Be clear-eyed about how far this goes: `reviewer-standards` is *asked* not to read the brief, and it has `Read`, so the separation is a convention its prompt maintains, not a sandbox. It holds because the agent has no reason to defect, not because it can't.
 
@@ -160,10 +160,10 @@ before. `gh` is the only thing stubbed.
 
 ## Extending
 
-Add a phase: drop a folder in `skills/`, add it to the lane table in `skills/pingu/SKILL.md` **and to `LANES` in `scripts/pingu.py`**, add its gate to the gate table **and to `GATES`**, and add its note type to the schema in `skills/vault/SKILL.md`. `tests/test_skills.py` fails if any of those pairs drift apart, which is the point of it.
+Add a phase: drop a folder in `skills/`, add it to the lane table in `skills/run/SKILL.md` **and to `LANES` in `scripts/pingu.py`**, add its gate to the gate table **and to `GATES`**, and add its note type to the schema in `skills/vault/SKILL.md`. `tests/test_skills.py` fails if any of those pairs drift apart, which is the point of it.
 
 When you write the gate, reach for a `manual` check rather than approximating one. A gate that pretends to check something it can't is worse than one that says a human has to look.
 
-Write the description to name the artifact it owns and the precondition it needs, then defer anything vaguer to `pingu`. The instinct is to write it pushy, because a single skill in isolation does tend to under-trigger — but every phase you make pushier competes with the router for the same request, and the router is the one that picks the lane and checks the setup gate. Pushiness belongs in `pingu` alone.
+Write the description to name the artifact it owns and the precondition it needs, then defer anything vaguer to `run`. The instinct is to write it pushy, because a single skill in isolation does tend to under-trigger — but every phase you make pushier competes with the router for the same request, and the router is the one that picks the lane and checks the setup gate. Pushiness belongs in `run` alone.
 
 Keep each `SKILL.md` under ~500 lines and push detail into `references/`, which loads only when needed.

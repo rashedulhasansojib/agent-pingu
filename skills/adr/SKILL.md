@@ -1,6 +1,6 @@
 ---
 name: adr
-description: Writes, supersedes, and looks up Architecture Decision Records in `decisions/` — the durable record of why the system is shaped the way it is, for choices expensive to reverse — a datastore, a queue, an auth model, an API shape, a dependency that will be hard to remove. Dispatched by the `pingu` router as the decision phase; also use directly when someone asks why we do it this way, when reversing an earlier decision, or when project practice contradicts a written standard. When the decision is part of new work with no brief behind it, `pingu` sequences discovery before design.
+description: Writes, supersedes, and looks up Architecture Decision Records in `decisions/` — the durable record of why the system is shaped the way it is, for choices expensive to reverse — a datastore, a queue, an auth model, an API shape, a dependency that will be hard to remove. Dispatched by the `run` router as the decision phase; also use directly when someone asks why we do it this way, when reversing an earlier decision, or when project practice contradicts a written standard. When the decision is part of new work with no brief behind it, `run` sequences discovery before design.
 ---
 
 # ADR
