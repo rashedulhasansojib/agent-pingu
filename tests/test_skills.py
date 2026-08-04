@@ -334,6 +334,33 @@ def test_skill_invocations_use_the_current_namespace(doc):
         assert match == PLUGIN_NAME, f"{doc} documents /{match}: — should be /{PLUGIN_NAME}:"
 
 
+AGENT_NAMES = sorted(p.stem for p in (PLUGIN_ROOT / "agents").glob("*.md"))
+
+
+def test_the_router_dispatches_agents_by_their_namespaced_name():
+    """Plugin agents resolve as `<plugin>:<agent>`, exactly like plugin skills.
+    A fresh session lists `agent-pingu:reviewer-standards`; the bare
+    `reviewer-standards` is rejected outright, so the delegation just fails.
+
+    The agent table names them bare, which reads naturally — so the router has
+    to say somewhere that the dispatch name carries the prefix.
+    """
+    text = (PLUGIN_ROOT / "skills" / "start" / "SKILL.md").read_text(encoding="utf-8")
+    assert f"{PLUGIN_NAME}:" in text, (
+        "start/SKILL.md never mentions the plugin prefix, so the router will "
+        "dispatch bare agent names and every delegation will fail")
+    assert re.search(rf"subagent_type[^\n]*{PLUGIN_NAME}:", text), (
+        "start/SKILL.md should show the prefix on subagent_type specifically")
+
+
+@pytest.mark.parametrize("name", AGENT_NAMES)
+def test_every_agent_the_router_names_actually_exists(name):
+    """The table is hand-written; a renamed agent file would leave it pointing
+    at a subagent type that does not resolve."""
+    text = (PLUGIN_ROOT / "skills" / "start" / "SKILL.md").read_text(encoding="utf-8")
+    assert f"`{name}`" in text, f"agents/{name}.md is not in the router's agent table"
+
+
 # ------------------------------------------------------------------- layout
 
 SKIP_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache"}

@@ -69,6 +69,8 @@ Delegate to a specialist when the work needs a different kind of attention than 
 | `reviewer-standards` | Diff review for craft, blind to the spec | verify |
 | `reviewer-spec` | Diff review for faithfulness, blind to style | verify |
 
+Dispatch them by their **plugin-qualified** name: `subagent_type: "agent-pingu:architect"`, not `"architect"`. Plugin agents are namespaced the same way plugin skills are, and the bare name does not resolve — the delegation simply fails.
+
 Call `security-reviewer` without being asked whenever a change touches authentication, authorization, secrets, user input crossing a trust boundary, personal data, payments, or file and network access. Waiting to be asked is how these get missed.
 
 `reviewer-standards` and `reviewer-spec` run in parallel and must stay separate. A reviewer holding the spec starts excusing sloppy code because it works; a reviewer holding the standards starts nitpicking code that solves the wrong problem.

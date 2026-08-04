@@ -139,6 +139,11 @@ typo'd `Gated` is how somebody runs unattended for a week believing otherwise.
 
 Delegated automatically; you can also ask for one by name.
 
+They are namespaced by plugin, like the skills: the dispatch name is
+`agent-pingu:architect`, not `architect`. The bare name does not resolve. They
+also only appear in a session started *after* the plugin was installed — a
+session already running when you install it will not see them.
+
 | Agent | Does |
 |---|---|
 | `architect` | System design, boundaries, data model, integration shape |
