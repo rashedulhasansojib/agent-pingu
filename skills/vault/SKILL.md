@@ -73,7 +73,8 @@ Run `pingu doctor` after any batch of note writing. It catches duplicate IDs, un
 
 ## Naming, IDs, and linking
 
-- Allocate IDs with `pingu next-id <type>`. Never guess the next number by eye. Two agents working in parallel will both guess the same one.
+- Allocate IDs with `pingu next-id <type>`. Never guess the next number by eye. Two agents working in parallel will both guess the same one. The command *reserves* what it returns, so agents racing inside one working tree get different numbers. Across separate clones the same number can still be allocated twice — `pingu doctor` reports that as a duplicate.
+- A reserved ID stays reserved whether or not you write the note. Allocate when you are about to create the note, not while sketching what you might create. A gap in the sequence is harmless; a duplicate is not.
 - IDs are zero-padded and monotonic per type: `ADR-0007`, `T-0042`, `EPIC-03`.
 - Filenames are `<ID>-<kebab-slug>.md`. The ID prefix keeps links stable when titles change.
 - Link with wikilinks, always: `[[ADR-0003-token-bucket]]`. Never paste content from another note — link to it. Duplicated context is context that will drift.

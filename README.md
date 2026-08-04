@@ -166,7 +166,7 @@ the `vault` skill for that tree.
 
 **One task, one file.** A concurrency decision. Parallel agents touch different files, so git merges cleanly.
 
-**IDs are allocated, not guessed.** Two agents eyeballing "the next number" pick the same one.
+**IDs are allocated, not guessed.** Two agents eyeballing "the next number" pick the same one — and so did `pingu next-id`, which read the highest ID and returned max+1. Sixteen concurrent `pingu new task` calls produced duplicates. It now *reserves* the ID it hands out, claiming it with `O_EXCL` so the loser of a race walks forward to the next number. That is a mutex within one working tree, which is the case parallel agents create; two people in separate clones can still collide, and `doctor` reports it.
 
 **Gates are executed, not self-assessed.** The gate table used to be prose asking the model to confirm it had met its own exit condition, which is the one party that cannot be trusted to answer. `pingu gate <phase>` runs the checks. Crucially it has a `manual-review` verdict for the checks no tool can decide — because forcing every gate into something checkable is how a green tick stops meaning anything. `not-declared` exists for the same reason: an undeclared test command is not a passing one.
 

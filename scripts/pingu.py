@@ -436,19 +436,93 @@ def cmd_status(vault, quiet=False):
 
 # ---------------------------------------------------------------------- next-id
 
-def next_id(vault, kind):
+RESERVED_DIR = ".ids"
+
+
+def _reservations(vault):
+    """The directory of claimed-but-not-yet-written IDs.
+
+    Local only. A reservation means nothing in someone else's clone and would
+    conflict on every merge if it were tracked, so the vault ignores it. Written
+    on demand rather than by vault_init, so vaults scaffolded before this existed
+    heal themselves on first use.
+    """
+    path = vault / RESERVED_DIR
+    path.mkdir(parents=True, exist_ok=True)
+    ignore = vault / ".gitignore"
+    try:
+        current = ignore.read_text(encoding="utf-8")
+    except OSError:
+        current = ""
+    if RESERVED_DIR not in current:
+        prefix = "" if not current or current.endswith("\n") else "\n"
+        ignore.write_text(
+            f"{current}{prefix}# ID reservations — a local mutex, not shared state\n"
+            f"{RESERVED_DIR}/\n",
+            encoding="utf-8",
+        )
+    return path
+
+
+def allocate_id(vault, kind, attempts=1000):
+    """Claim the next free ID for `kind`, atomically.
+
+    `next_id` used to read the highest ID and return max+1, which is precisely
+    the "two agents both guess the same number" failure the vault skill warns
+    about — eight concurrent `pingu new task` calls produced two pairs of
+    duplicates. O_EXCL is the fix: whoever creates the marker file owns the ID,
+    and the loser of the race walks forward to the next one.
+
+    This is a mutex within one working tree, which is the case the design
+    encourages by running agents in parallel. Two people in separate clones can
+    still land on the same ID; git shows both files and `pingu doctor` reports
+    the duplicate.
+    """
     prefix, _, pad = TYPES[kind]
-    highest = 0
+    reserved = _reservations(vault)
+
+    taken = set()
     for note in load_notes(vault):
-        nid = note.get("id") or ""
-        match = re.fullmatch(rf"{prefix}-(\d+)", nid)
+        match = re.fullmatch(rf"{prefix}-(\d+)", note.get("id") or "")
         if match:
-            highest = max(highest, int(match.group(1)))
-    return f"{prefix}-{highest + 1:0{pad}d}"
+            taken.add(int(match.group(1)))
+
+    highest = max(taken) if taken else 0
+    for marker in reserved.iterdir():
+        match = re.fullmatch(rf"{prefix}-(\d+)", marker.name)
+        if not match:
+            continue
+        # A reservation whose note now exists has been spent. Dropping it here
+        # keeps the directory bounded instead of growing one file per ID forever.
+        if int(match.group(1)) in taken:
+            try:
+                marker.unlink()
+            except OSError:
+                pass
+            continue
+        highest = max(highest, int(match.group(1)))
+
+    number = highest + 1
+    for _ in range(attempts):
+        nid = f"{prefix}-{number:0{pad}d}"
+        try:
+            os.close(os.open(str(reserved / nid), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+        except FileExistsError:
+            number += 1
+            continue
+        except OSError:
+            # An unwritable vault should not silently hand out a colliding ID.
+            raise
+        return nid
+    raise RuntimeError(f"could not allocate a {kind} ID after {attempts} attempts")
+
+
+# Kept as the name the rest of the code and the docs use.
+next_id = allocate_id
 
 
 def cmd_next_id(vault, kind):
-    print(next_id(vault, kind))
+    print(allocate_id(vault, kind))
     return 0
 
 

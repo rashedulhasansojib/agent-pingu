@@ -160,7 +160,8 @@ Delegated automatically; you can also ask for one by name.
 pingu status              # lane, phase, blockers, unsynced tasks
 pingu doctor              # validate the vault before a PR
 pingu gate [phase]        # evaluate a phase's exit condition
-pingu next-id task        # allocate an ID safely
+pingu next-id task        # reserve the next free ID
+pingu vault-path          # where the vault resolved to
 pingu new adr "Title"     # scaffold a note, print its path
 
 gh-sync push             # create Issues for new tasks
@@ -173,6 +174,12 @@ These are on the PATH while the plugin is enabled. The implementations live in `
 `doctor` catches duplicate IDs, unknown statuses, broken wikilinks, and tasks pointing at epics that don't exist. Run it before opening a PR; these are the failures that silently break the board.
 
 `status` reads the `work_type` on the most recently updated note to decide which lane it is reporting against, so a chore stays a chore across sessions instead of looking like a stalled feature.
+
+`next-id` reserves the number it prints, in `docs/vault/.ids/` — which the vault
+gitignores, because a reservation means nothing in anyone else's clone. Two
+agents racing in the same working tree therefore get different IDs. Two people in
+separate clones can still both allocate `T-0042`; `doctor` reports the duplicate
+when the branches meet, which is the earliest anything could.
 
 ### Gates
 
