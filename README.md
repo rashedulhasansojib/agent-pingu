@@ -155,10 +155,19 @@ tests/            pytest and pyyaml; the tooling itself has no dependencies
 
 .github/workflows/
   test.yml        pytest on 3.9 and 3.13, shell syntax, claude plugin validate
+
+docs/vault/       this plugin's own vault — it runs the loop on itself
+  context.md      what agent-pingu is, and the landmines
+  glossary.md     lane, phase, discipline, gate, confirm — terms with local meanings
+  standards/      what is enforced here, marked observed or agreed
+  decisions/      ADR-0001..0004, the decisions behind the current design
+  retro/          RETRO-0001, what the first verify phase found
 ```
 
-That is what ships. What it *creates* is `docs/vault/` inside your repo — see
-the `vault` skill for that tree.
+Everything above `docs/` is what ships. `docs/vault/` is what the plugin
+*creates* in a repo — kept here too, because a tool that requires every project
+to hold a vault and holds none itself is making an untested argument. See the
+`vault` skill for the full tree.
 
 ## Design decisions worth knowing
 

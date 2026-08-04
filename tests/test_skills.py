@@ -382,8 +382,13 @@ def test_the_layout_block_lists_every_directory_that_ships():
         p.name for p in PLUGIN_ROOT.iterdir()
         if p.is_dir() and p.name not in SKIP_DIRS)
 
-    missing = [d for d in shipped if f"{d}/" not in block]
-    assert not missing, f"README's layout block never mentions: {', '.join(missing)}"
+    # Anchored to the start of a line, because a bare substring search passes on
+    # a mention inside another entry's description. `docs/` was satisfied by the
+    # words "scaffolds docs/vault/" on the vault-init line, so the block went on
+    # claiming to be complete while a whole top-level directory was missing.
+    missing = [d for d in shipped
+               if not re.search(rf"^{re.escape(d)}/", block, re.MULTILINE)]
+    assert not missing, f"README's layout block never lists: {', '.join(missing)}"
 
 
 def test_the_layout_block_does_not_invent_directories():
