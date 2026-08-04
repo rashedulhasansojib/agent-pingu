@@ -38,7 +38,39 @@ You can decline. The loop notes it and carries on, and won't nag twice.
 
 Requirements: Python 3, git, and an authenticated `gh` CLI if you want Issue mirroring. Obsidian needs the Dataview plugin for the board.
 
-## 3. Daily use
+## 3. Vault layout
+
+`vault-init` creates this inside your repo, and commits with it — so the notes
+are reviewed in the same PR as the behaviour they describe:
+
+```
+docs/vault/
+  context.md          INDEX — read first. Also declares test_command for the gates
+  glossary.md         the project's shared language, one definition per term
+  brief.md            written by talk; absent until then
+  standards/
+    engineering.md    style, testing bar, definition of done
+    security.md       trust boundaries, secrets, data handling
+  patterns/           solution shapes that have worked here, added by retro
+  research/           R-0001-<slug>.md      spikes and option analysis
+  decisions/          ADR-0001-<slug>.md    why the system is shaped this way
+  plan/               EPIC-01-<slug>.md
+  tasks/              T-0001-<slug>.md      one file per task, never a list
+  runs/               YYYY-MM-DD-<slug>.md  append-only log of what happened
+  retro/              RETRO-0001-<slug>.md
+  review/             <date>-<slug>.md      the one page you actually read
+  dashboards/
+    board.md          Dataview board over this project
+```
+
+Everything but `context.md`, `glossary.md`, `board.md` and the two standards
+starts empty — the phases fill them as work moves. Point Obsidian at the repo
+root or at `docs/vault` directly; wikilinks resolve either way.
+
+Set `vault_dir` in the plugin's configuration to put it somewhere other than
+`docs/vault`.
+
+## 4. Daily use
 
 Just describe the work. The loop picks the lane.
 
@@ -57,7 +89,7 @@ Just describe the work. The loop picks the lane.
 
 You can also call any piece directly — `/agent-pingu:adr`, `/agent-pingu:diagnose`, `/agent-pingu:grilling`, `/agent-pingu:domain-modeling` — without running the whole loop. Plugin skills are namespaced by plugin name, so the prefix is required; type `/agent-pingu:` and the picker will list them. Nothing here requires anything else.
 
-## 4. What a full run does
+## 5. What a full run does
 
 On `full-loop` autonomy it works from your request to a pull request and stops **once**, handing back a one-page review packet in `docs/vault/review/`. Read that, not the forty notes behind it.
 
@@ -75,7 +107,7 @@ file, the value lives in `~/.claude/settings.json`:
 { "pluginConfigs": { "agent-pingu@skills-dir": { "options": { "autonomy": "gated" } } } }
 ```
 
-## 5. The agents
+## 6. The agents
 
 Delegated automatically; you can also ask for one by name.
 
@@ -94,7 +126,7 @@ Delegated automatically; you can also ask for one by name.
 
 `architect` and `senior-engineer` start with the `vault` skill already in context, so they know the note schema and ID rules without going to look; `architect` also gets `domain-modeling`, because naming boundaries is most of what it does.
 
-## 6. Tooling
+## 7. Tooling
 
 ```bash
 pingu status              # lane, phase, blockers, unsynced tasks
@@ -155,7 +187,7 @@ gh-sync push --public-ok    # yes, this repo is meant to be public
 
 `push` also looks for an Issue already titled with the task's ID before creating one, and adopts it. That covers the window where a previous run created the Issue but died before writing `gh_issue` back into the note.
 
-## 7. Working as a team
+## 8. Working as a team
 
 The vault is committed with the code, so documentation is reviewed in the same PR that changes the behaviour it describes.
 
@@ -163,13 +195,13 @@ One task is one file — deliberately. Several people running agents in parallel
 
 Tasks mirror to GitHub Issues, so teammates who never open Obsidian still see work appear where they already look. The vault note stays the source of truth for content; `gh-sync pull` brings Issue discussion back.
 
-## 8. Keeping it useful
+## 9. Keeping it useful
 
 The retro phase writes learnings back into `standards/`, `patterns/`, and `glossary.md`. That is the step where the loop compounds — skip it and the next person pays the same tuition.
 
 If output quality drifts, the cause is almost always a thin standards file or a stale `context.md`, not the skills. Fix the vault first.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Cause |
 |---|---|

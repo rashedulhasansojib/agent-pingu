@@ -337,3 +337,45 @@ def test_the_layout_block_names_the_real_scripts_and_bin_entries():
 
     for path in sorted((PLUGIN_ROOT / "bin").iterdir()) + sorted((PLUGIN_ROOT / "scripts").iterdir()):
         assert path.name in block, f"{path.parent.name}/{path.name} is missing from the layout"
+
+
+def vault_dirs_created():
+    """The directories vault_init.sh actually makes, parsed from its mkdir."""
+    text = (PLUGIN_ROOT / "scripts" / "vault_init.sh").read_text(encoding="utf-8")
+    match = re.search(r'mkdir -p "\$VAULT"/\{([^}]+)\}', text)
+    assert match, "vault_init.sh no longer creates the vault with one brace expansion"
+    return sorted(d.strip() for d in match.group(1).split(","))
+
+
+def manual_vault_tree():
+    text = (PLUGIN_ROOT / "MANUAL.md").read_text(encoding="utf-8")
+    # Two steps, deliberately. One pattern with DOTALL lets `.*[Ll]ayout.*` run
+    # from the `# Manual` title down to any stray "layout" later in the file and
+    # capture whatever fence follows — which is how this first matched a
+    # paragraph about test_command and passed while testing nothing.
+    heading = re.search(r"^#+ [^\n]*[Ll]ayout[^\n]*$", text, re.MULTILINE)
+    assert heading, "MANUAL has no layout section"
+    block = re.search(r"^```\n(.*?)^```", text[heading.end():], re.MULTILINE | re.DOTALL)
+    assert block, "MANUAL's layout section has no fenced tree"
+    return block.group(1)
+
+
+def test_the_manual_documents_every_directory_the_vault_gets():
+    """MANUAL's tree and vault_init.sh's mkdir are the same list twice. The
+    script is the source of truth; the doc is what a human reads."""
+    tree = manual_vault_tree()
+
+    missing = [d for d in vault_dirs_created() if f"{d}/" not in tree]
+    assert not missing, f"MANUAL's vault tree never mentions: {', '.join(missing)}"
+
+
+def test_the_manual_vault_tree_invents_nothing():
+    tree = manual_vault_tree()
+    created = set(vault_dirs_created())
+
+    assert tree.lstrip().startswith("docs/vault/"), "the tree should be rooted at the vault"
+
+    # Indented entries only. The unindented first line is the vault root itself,
+    # which is a container rather than something the mkdir creates.
+    for name in re.findall(r"^\s+([a-z][a-z._-]*)/", tree, re.MULTILINE):
+        assert name in created, f"MANUAL claims {name}/ which vault-init never creates"
