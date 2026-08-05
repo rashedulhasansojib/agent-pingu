@@ -498,6 +498,51 @@ def test_the_layout_block_lists_every_directory_that_ships():
     assert not missing, f"README's layout block never lists: {', '.join(missing)}"
 
 
+ASSETS = PLUGIN_ROOT / "assets"
+
+
+def test_every_screenshot_the_readme_shows_exists():
+    """A README that renders a broken image is worse than one with no images."""
+    text = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
+    referenced = re.findall(r'src="(assets/[^"]+)"', text)
+    assert referenced, "the README no longer shows any screenshots"
+    for rel in referenced:
+        assert (PLUGIN_ROOT / rel).is_file(), f"README shows {rel}, which is not in the repo"
+
+
+def test_no_screenshot_is_orphaned():
+    """The inverse: an image nobody shows is an image nobody notices has gone
+    stale."""
+    text = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
+    for png in sorted(ASSETS.glob("*.png")):
+        assert f"assets/{png.name}" in text, f"{png.name} is in assets/ but shown nowhere"
+
+
+def test_every_screenshot_has_the_transcript_it_was_drawn_from():
+    """The images are generated, not photographed, so the source has to ship —
+    otherwise nobody can regenerate one when the output changes, and a stale
+    screenshot is a documentation claim that quietly stopped being true."""
+    for png in sorted(ASSETS.glob("*.png")):
+        transcript = ASSETS / "transcripts" / f"{png.stem}.txt"
+        assert transcript.is_file(), (
+            f"{png.name} has no transcript; assets/render_screenshots.py cannot "
+            f"redraw it")
+
+
+@pytest.mark.parametrize(
+    "path", sorted((PLUGIN_ROOT / "assets" / "transcripts").glob("*.txt")),
+    ids=lambda p: p.name)
+def test_a_transcript_shows_real_command_output(path):
+    """Each transcript must start with a real command from this plugin. A
+    screenshot is a claim about behaviour, and an invented one is the most
+    convincing kind of wrong documentation."""
+    first = path.read_text(encoding="utf-8").splitlines()[0]
+    assert first.startswith("$ "), f"{path.name} does not open with a command"
+    command = first[2:].split()[0]
+    assert command in {"pingu", "gh-sync", "vault-init"}, (
+        f"{path.name} shows `{command}`, which this plugin does not provide")
+
+
 def test_this_repos_own_working_notes_stay_out_of_the_repo():
     """README's "Built with itself" section says the vault this repo runs on
     stays local. It was published once by accident, and removing it afterwards

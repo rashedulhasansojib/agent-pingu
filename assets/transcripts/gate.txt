@@ -1,0 +1,8 @@
+$ pingu gate verify --execute
+[gate] verify   (executed)
+  passed         test suite passes
+                 exit code 0
+  manual-review  reviews returned with no blocking findings
+                 The four reviewers ran and their blocking findings are closed.
+[gate] 1 check(s) still outstanding — the gate is not met yet
+[gate] manual-review means not verified by tooling; a human confirms those

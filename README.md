@@ -6,6 +6,13 @@ See [MANUAL.md](MANUAL.md) for practical instructions, and
 [WALKTHROUGH.md](WALKTHROUGH.md) for an end-to-end run on a real project —
 install, setup, every phase, and the two things that went wrong.
 
+<img src="assets/gate.png" alt="pingu gate verify --execute: one check passed, one manual-review outstanding, and the gate reported as not met" width="770">
+
+Every image on this page is real output, captured from the runs in
+[WALKTHROUGH.md](WALKTHROUGH.md) and rendered by
+[`assets/render_screenshots.py`](assets/render_screenshots.py) from the
+transcripts beside it. Nothing here is mocked up.
+
 ## Why
 
 Context windows die between sessions. Vaults don't. Every phase reads the previous note and writes the next, so a run is resumable, auditable, and shareable.
@@ -29,6 +36,8 @@ Restart Claude Code and confirm with `claude plugin list` — you should see
 ```bash
 cd <your repo> && ~/.claude/skills/agent-pingu/scripts/vault_init.sh
 ```
+
+<img src="assets/onboard.png" alt="vault-init scaffolds docs/vault, then pingu status reports phase setup and SETUP NEEDED listing the four files still templates" width="887">
 
 Restart Claude Code, then say **"set up the vault"**. The loop reads your repo and drafts the standards, context index, and glossary, asking you only about what it cannot infer. Until that is done, session start reports `SETUP NEEDED` and the loop will offer setup before starting new work — those files are loaded by every phase, so leaving them as templates is what produces generic output.
 
@@ -100,6 +109,15 @@ gate reports `not-declared` rather than passing.
 need a shell to interpret, and `context.md` is a file the model writes. A string
 is rejected with a message telling you to use a list.
 
+### And the notes themselves
+
+Gates check a phase; `pingu doctor` checks the vault. It catches the failures
+that break the Obsidian board silently — duplicate IDs from a bad merge, a
+status nothing recognises, a wikilink pointing at a note that was renamed, a
+task orphaned from its epic. Run it before a PR; it exits non-zero so CI can.
+
+<img src="assets/doctor.png" alt="pingu doctor reporting five problems across six notes: a duplicate id, an unknown status, a broken wikilink and two missing epics, exiting 1" width="833">
+
 ## Layout
 
 ```
@@ -142,6 +160,10 @@ hooks/
 templates/        Obsidian templates, for writing a note by hand
   brief.md  task.md  adr.md
 
+assets/           the screenshots above, and what generates them
+  render_screenshots.py   draws the PNGs from the transcripts
+  transcripts/            real captured output, one file per image
+
 tests/            pytest and pyyaml; the tooling itself has no dependencies
   test_pingu.py   lanes, phase inference, doctor, vault paths
   test_gates.py   the gate runner: vault, command and manual checks
@@ -170,7 +192,7 @@ the `vault` skill for that tree.
 
 **One task, one file.** A concurrency decision. Parallel agents touch different files, so git merges cleanly.
 
-**IDs are allocated, not guessed.** Two agents eyeballing "the next number" pick the same one — and so did `pingu next-id`, which read the highest ID and returned max+1. Eight concurrent `pingu new task` calls produced duplicates. It now *reserves* the ID it hands out, claiming it with `O_EXCL` so the loser of a race walks forward to the next number. Reservations are never deleted: the first version pruned one once its note existed, which reopened the race, because that marker is the only evidence a caller holding a stale scan has that the ID is gone. That mutex covers one working tree, which is the case parallel agents create; two people in separate clones can still collide, and `doctor` reports it.
+**IDs are allocated, not guessed.** Two agents eyeballing "the next number" pick the same one — and so did `pingu next-id`, which read the highest ID and returned max+1. Eight concurrent `pingu new task` calls produced duplicates. It now *reserves* the ID it hands out, claiming it with `O_EXCL` so the loser of a race walks forward to the next number. Winning the marker is not enough on its own, which is what the first version got wrong: a spent marker is pruned to keep the directory bounded, and that pruning destroyed the only evidence a caller holding a stale scan had that an ID was gone. So a claim is confirmed against a fresh read of the notes before it is handed out — that step is what makes pruning safe. That mutex covers one working tree, which is the case parallel agents create; two people in separate clones can still collide, and `doctor` reports it.
 
 **Gates are executed, not self-assessed.** The gate table used to be prose asking the model to confirm it had met its own exit condition, which is the one party that cannot be trusted to answer. `pingu gate <phase>` runs the checks. Crucially it has a `manual-review` verdict for the checks no tool can decide — because forcing every gate into something checkable is how a green tick stops meaning anything. `not-declared` exists for the same reason: an undeclared test command is not a passing one.
 
