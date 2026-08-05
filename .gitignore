@@ -1,3 +1,8 @@
 .venv/
 __pycache__/
 .pytest_cache/
+
+# This repo's own working vault. The plugin creates docs/vault/ in the repos it
+# is used on, and those are meant to be committed — this one is not, because it
+# is session notes for building the plugin rather than part of what ships.
+docs/

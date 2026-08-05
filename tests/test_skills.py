@@ -454,7 +454,14 @@ def test_every_agent_the_router_names_actually_exists(name):
 
 # ------------------------------------------------------------------- layout
 
-SKIP_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache"}
+def tracked_files(*paths):
+    """What git actually ships, which is the only honest answer to "what is in
+    this repo". Two layout guards read the filesystem instead and both broke on
+    things that merely happened to be present."""
+    return subprocess.run(
+        ["git", "ls-files", *paths],
+        cwd=PLUGIN_ROOT, capture_output=True, text=True, check=True,
+    ).stdout.split()
 
 
 def layout_block():
@@ -469,9 +476,14 @@ def test_the_layout_block_lists_every_directory_that_ships():
     """A layout diagram nobody checks is a diagram that quietly goes stale — it
     already had, missing hooks/, templates/, .claude-plugin/ and .github/."""
     block = layout_block()
-    shipped = sorted(
-        p.name for p in PLUGIN_ROOT.iterdir()
-        if p.is_dir() and p.name not in SKIP_DIRS)
+
+    # What git tracks, not what the filesystem holds. Reading the directory made
+    # the test demand the README document whatever happened to be lying around —
+    # `__pycache__` from a test run, or an untracked working directory. Twice.
+    # The question the diagram answers is "what ships", and git knows that.
+    top = {name.split("/", 1)[0] for name in tracked_files()}
+    shipped = sorted(d for d in top if (PLUGIN_ROOT / d).is_dir())
+    assert shipped, "git lists no tracked directories"
 
     # Anchored to the start of a line, because a bare substring search passes on
     # a mention inside another entry's description. `docs/` was satisfied by the
@@ -498,10 +510,7 @@ def test_the_layout_block_names_the_real_scripts_and_bin_entries():
     # so the test demanded the README document a build artifact, and passed or
     # failed depending on whether the cache happened to exist yet. It survived
     # every local run and failed on CI's clean checkout, first push.
-    tracked = subprocess.run(
-        ["git", "ls-files", "bin", "scripts"],
-        cwd=PLUGIN_ROOT, capture_output=True, text=True, check=True,
-    ).stdout.split()
+    tracked = tracked_files("bin", "scripts")
     assert tracked, "git lists nothing under bin/ or scripts/"
 
     for name in tracked:
