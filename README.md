@@ -6,24 +6,28 @@ See [MANUAL.md](MANUAL.md) for practical instructions, and
 [WALKTHROUGH.md](WALKTHROUGH.md) for an end-to-end run on a real project —
 install, setup, every phase, and the two things that went wrong.
 
-<img src="assets/demo.gif" alt="pingu status, then pingu gate verify showing a planned check, then --execute running the suite: the test check passes but the manual-review check stays outstanding and the gate reports it is not met" width="762">
+<img src="assets/gates.gif" alt="pingu status, then pingu gate verify showing a planned check, then --execute running the suite: the test check passes but the manual-review check stays outstanding and the gate reports it is not met" width="1100">
 
 **`--execute` runs the suite and the gate still does not pass.** The check no
 tool can decide stays outstanding until a human says otherwise, which is the
 whole design.
 
-Every image on this page is output the tool actually produced, captured from the
-runs in [WALKTHROUGH.md](WALKTHROUGH.md) and drawn by
-[`assets/render_screenshots.py`](assets/render_screenshots.py) from the
-transcripts beside it — so they can be redrawn when behaviour changes instead of
-quietly describing a version that no longer exists. The GIF's typing rhythm is
-invented; every character it types is not.
+Both recordings on this page are real — a genuine terminal, genuine timing, made
+with [vhs](https://github.com/charmbracelet/vhs) from the tapes in `assets/`.
+Re-run `vhs assets/gates.tape` and it records itself again. Nothing is drawn,
+staged, or sped up.
 
 ## Why
 
 Context windows die between sessions. Vaults don't. Every phase reads the previous note and writes the next, so a run is resumable, auditable, and shareable.
 
 The second reason matters more: **prompting skill varies across a team, and it shouldn't decide output quality.** Someone types "add rate limiting" and the loop still loads your standards, your accepted decisions, and your task format — because the skills carry the questions and the vault carries the context. Nobody has to already know what a good brief contains.
+
+Here is the first reason, recorded. A session with no memory of the work is asked
+where things stand, and reconstructs it from the vault — the lane, the backedge
+mid-execute, what the reviewers found, and what was left open on purpose:
+
+<img src="assets/resume.gif" alt="claude -p 'where are we?' in a repo with a vault: a fresh session reconstructs the whole run — phases, the T-0001 backedge, the two blocking defects the reviewers found, and the three issues left open deliberately" width="1180">
 
 ## Install
 
@@ -42,8 +46,6 @@ Restart Claude Code and confirm with `claude plugin list` — you should see
 ```bash
 cd <your repo> && ~/.claude/skills/agent-pingu/scripts/vault_init.sh
 ```
-
-<img src="assets/onboard.png" alt="vault-init scaffolds docs/vault, then pingu status reports phase setup and SETUP NEEDED listing the four files still templates" width="887">
 
 Restart Claude Code, then say **"set up the vault"**. The loop reads your repo and drafts the standards, context index, and glossary, asking you only about what it cannot infer. Until that is done, session start reports `SETUP NEEDED` and the loop will offer setup before starting new work — those files are loaded by every phase, so leaving them as templates is what produces generic output.
 
@@ -122,8 +124,6 @@ that break the Obsidian board silently — duplicate IDs from a bad merge, a
 status nothing recognises, a wikilink pointing at a note that was renamed, a
 task orphaned from its epic. Run it before a PR; it exits non-zero so CI can.
 
-<img src="assets/doctor.png" alt="pingu doctor reporting five problems across six notes: a duplicate id, an unknown status, a broken wikilink and two missing epics, exiting 1" width="833">
-
 ## Layout
 
 ```
@@ -166,9 +166,9 @@ hooks/
 templates/        Obsidian templates, for writing a note by hand
   brief.md  task.md  adr.md
 
-assets/           the demo above, and what generates it
-  render_screenshots.py   draws the GIF and PNGs from the transcripts
-  transcripts/            real captured output, one file per image
+assets/           the recordings above, and the tapes that make them
+  gates.tape      the verify gate, run for real
+  resume.tape     a live session reading the vault
 
 tests/            pytest and pyyaml; the tooling itself has no dependencies
   test_pingu.py   lanes, phase inference, doctor, vault paths

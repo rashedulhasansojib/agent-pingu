@@ -525,29 +525,35 @@ def test_no_screenshot_is_orphaned():
         assert f"assets/{image.name}" in text, f"{image.name} is in assets/ but shown nowhere"
 
 
-def test_every_screenshot_has_the_transcript_it_was_drawn_from():
-    """The images are generated, not photographed, so the source has to ship —
-    otherwise nobody can regenerate one when the output changes, and a stale
-    screenshot is a documentation claim that quietly stopped being true."""
+def test_every_recording_keeps_the_tape_that_made_it():
+    """A recording cannot notice it has gone stale — that is the price of it
+    being real rather than drawn. Shipping the tape is what makes re-recording
+    a one-line job instead of an archaeology exercise."""
     for image in rendered_images():
-        transcript = ASSETS / "transcripts" / f"{image.stem}.txt"
-        assert transcript.is_file(), (
-            f"{image.name} has no transcript; assets/render_screenshots.py cannot "
-            f"redraw it")
+        tape = ASSETS / f"{image.stem}.tape"
+        assert tape.is_file(), (
+            f"{image.name} has no tape; nobody can re-record it when the output "
+            f"changes")
 
 
 @pytest.mark.parametrize(
-    "path", sorted((PLUGIN_ROOT / "assets" / "transcripts").glob("*.txt")),
-    ids=lambda p: p.name)
-def test_a_transcript_shows_real_command_output(path):
-    """Each transcript must start with a real command from this plugin. A
-    screenshot is a claim about behaviour, and an invented one is the most
-    convincing kind of wrong documentation."""
-    first = path.read_text(encoding="utf-8").splitlines()[0]
-    assert first.startswith("$ "), f"{path.name} does not open with a command"
-    command = first[2:].split()[0]
-    assert command in {"pingu", "gh-sync", "vault-init"}, (
-        f"{path.name} shows `{command}`, which this plugin does not provide")
+    "path", sorted((PLUGIN_ROOT / "assets").glob("*.tape")), ids=lambda p: p.name)
+def test_a_tape_records_commands_this_plugin_provides(path):
+    """A recording is a claim about behaviour, and an invented one is the most
+    convincing kind of wrong documentation. Every command a tape types has to be
+    something this repo actually ships."""
+    text = path.read_text(encoding="utf-8")
+    assert re.search(r'^Output "assets/', text, re.MULTILINE), (
+        f"{path.name} does not write its output into assets/")
+
+    typed = re.findall(r'^Type "([^"]+)"', text, re.MULTILINE)
+    assert typed, f"{path.name} types nothing"
+    commands = {line.split()[0] for line in typed
+                if not line.startswith("cd ")}
+    assert commands, f"{path.name} runs no command"
+    assert commands <= {"pingu", "gh-sync", "vault-init", "claude"}, (
+        f"{path.name} types {sorted(commands - {'pingu', 'gh-sync', 'vault-init', 'claude'})}, "
+        f"which is not this plugin or Claude Code")
 
 
 def test_this_repos_own_working_notes_stay_out_of_the_repo():

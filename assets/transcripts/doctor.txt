@@ -1,9 +1,0 @@
-$ pingu doctor
-  duplicate id T-0007: tasks/T-0007-add-rate-limiting.md and tasks/T-0007-duplicate.md
-  T-0007: unknown status 'inprogress'
-  T-0007: broken link [[ADR-0004-token-bucket]]
-  T-0007: epic EPIC-02 does not exist
-  T-0007: epic EPIC-01 does not exist
-
-5 problem(s) across 6 notes
-exit code: 1
