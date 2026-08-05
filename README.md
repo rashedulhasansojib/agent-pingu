@@ -6,12 +6,18 @@ See [MANUAL.md](MANUAL.md) for practical instructions, and
 [WALKTHROUGH.md](WALKTHROUGH.md) for an end-to-end run on a real project —
 install, setup, every phase, and the two things that went wrong.
 
-<img src="assets/gate.png" alt="pingu gate verify --execute: one check passed, one manual-review outstanding, and the gate reported as not met" width="770">
+<img src="assets/demo.gif" alt="pingu status, then pingu gate verify showing a planned check, then --execute running the suite: the test check passes but the manual-review check stays outstanding and the gate reports it is not met" width="762">
 
-Every image on this page is real output, captured from the runs in
-[WALKTHROUGH.md](WALKTHROUGH.md) and rendered by
+**`--execute` runs the suite and the gate still does not pass.** The check no
+tool can decide stays outstanding until a human says otherwise, which is the
+whole design.
+
+Every image on this page is output the tool actually produced, captured from the
+runs in [WALKTHROUGH.md](WALKTHROUGH.md) and drawn by
 [`assets/render_screenshots.py`](assets/render_screenshots.py) from the
-transcripts beside it. Nothing here is mocked up.
+transcripts beside it — so they can be redrawn when behaviour changes instead of
+quietly describing a version that no longer exists. The GIF's typing rhythm is
+invented; every character it types is not.
 
 ## Why
 
@@ -160,8 +166,8 @@ hooks/
 templates/        Obsidian templates, for writing a note by hand
   brief.md  task.md  adr.md
 
-assets/           the screenshots above, and what generates them
-  render_screenshots.py   draws the PNGs from the transcripts
+assets/           the demo above, and what generates it
+  render_screenshots.py   draws the GIF and PNGs from the transcripts
   transcripts/            real captured output, one file per image
 
 tests/            pytest and pyyaml; the tooling itself has no dependencies

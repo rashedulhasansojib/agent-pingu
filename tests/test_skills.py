@@ -501,6 +501,13 @@ def test_the_layout_block_lists_every_directory_that_ships():
 ASSETS = PLUGIN_ROOT / "assets"
 
 
+def rendered_images():
+    """Every image the renderer produces. The GIF counts: it is generated from a
+    transcript exactly like the stills, and leaving it out of these guards is how
+    the one image nobody can regenerate ends up being the one that goes stale."""
+    return sorted(list(ASSETS.glob("*.png")) + list(ASSETS.glob("*.gif")))
+
+
 def test_every_screenshot_the_readme_shows_exists():
     """A README that renders a broken image is worse than one with no images."""
     text = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
@@ -514,18 +521,18 @@ def test_no_screenshot_is_orphaned():
     """The inverse: an image nobody shows is an image nobody notices has gone
     stale."""
     text = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
-    for png in sorted(ASSETS.glob("*.png")):
-        assert f"assets/{png.name}" in text, f"{png.name} is in assets/ but shown nowhere"
+    for image in rendered_images():
+        assert f"assets/{image.name}" in text, f"{image.name} is in assets/ but shown nowhere"
 
 
 def test_every_screenshot_has_the_transcript_it_was_drawn_from():
     """The images are generated, not photographed, so the source has to ship —
     otherwise nobody can regenerate one when the output changes, and a stale
     screenshot is a documentation claim that quietly stopped being true."""
-    for png in sorted(ASSETS.glob("*.png")):
-        transcript = ASSETS / "transcripts" / f"{png.stem}.txt"
+    for image in rendered_images():
+        transcript = ASSETS / "transcripts" / f"{image.stem}.txt"
         assert transcript.is_file(), (
-            f"{png.name} has no transcript; assets/render_screenshots.py cannot "
+            f"{image.name} has no transcript; assets/render_screenshots.py cannot "
             f"redraw it")
 
 

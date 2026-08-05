@@ -115,15 +115,77 @@ def render(name, title):
     print(f"{out.relative_to(HERE.parent)}  {img_w // SCALE}x{img_h // SCALE}")
 
 
+def render_gif(name, title, scale=1):
+    """Animate a transcript as if it were being typed.
+
+    Driven by the same captured output as the stills, for the same reason: a
+    recorded GIF cannot be regenerated when behaviour changes, so it goes stale
+    without anyone noticing. This one is redrawn by re-running the script.
+
+    The timing is invented — nobody types at a constant rate — but every
+    character on screen is output the tool actually produced. The README says so
+    rather than implying a real recording.
+    """
+    lines = (TRANSCRIPTS / f"{name}.txt").read_text(encoding="utf-8").rstrip("\n").split("\n")
+    font = ImageFont.truetype(FONTS[0], 15 * scale)
+    label_font = ImageFont.truetype(FONTS[0], 12 * scale)
+
+    pad, titlebar, line_h = 18 * scale, 30 * scale, 21 * scale
+    width = int(max(font.getlength(l) for l in lines)) + pad * 2 + 15 * scale
+    height = titlebar + pad + line_h * len(lines) + pad
+
+    def frame(visible):
+        image = Image.new("RGB", (width, height), BG)
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle([0, 0, width - 1, height - 1], radius=8 * scale, fill=BG)
+        draw.rounded_rectangle([0, 0, width - 1, titlebar + 8 * scale],
+                               radius=8 * scale, fill=TITLEBAR_BG)
+        draw.rectangle([0, titlebar - 1, width, titlebar + 1], fill=TITLEBAR_BG)
+        for i, colour in enumerate(((255, 95, 87), (254, 188, 46), (40, 200, 64))):
+            cx, cy, r = pad + i * 17 * scale, titlebar // 2, 5 * scale
+            draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=colour)
+        draw.text((width // 2, titlebar // 2), title, font=label_font, fill=DIM, anchor="mm")
+        y = titlebar + pad
+        for text in visible:
+            draw.text((pad, y), text, font=font, fill=colour_for(text))
+            y += line_h
+        return image
+
+    frames, durations, shown = [], [], []
+    for line in lines:
+        if line.startswith("$ "):
+            for i in range(2, len(line) + 1, 2):          # a couple of characters a frame
+                frames.append(frame(shown + [line[:i] + "█"]))
+                durations.append(45)
+            shown.append(line)
+            frames.append(frame(shown))
+            durations.append(420)                          # the beat before it runs
+        else:
+            shown.append(line)
+            frames.append(frame(shown))
+            durations.append(60 if not line.strip() else 130)
+    durations[-1] = 3200                                   # hold on the final state
+
+    out = HERE / f"{name}.gif"
+    frames[0].save(out, save_all=True, append_images=frames[1:], duration=durations,
+                   loop=0, optimize=True)
+    size = out.stat().st_size / 1024
+    print(f"{out.relative_to(HERE.parent)}  {width}x{height}  "
+          f"{len(frames)} frames  {size:.0f}KB")
+
+
 SHOTS = {
     "onboard": "agent-pingu — a new repo",
-    "gate": "agent-pingu — the verify gate",
     "doctor": "agent-pingu — vault validation",
 }
 
+GIFS = {"demo": "agent-pingu — gates are run, not asserted"}
+
 if __name__ == "__main__":
-    missing = [n for n in SHOTS if not (TRANSCRIPTS / f"{n}.txt").is_file()]
+    missing = [n for n in list(SHOTS) + list(GIFS) if not (TRANSCRIPTS / f"{n}.txt").is_file()]
     if missing:
         sys.exit(f"missing transcripts: {', '.join(missing)}")
     for name, title in SHOTS.items():
         render(name, title)
+    for name, title in GIFS.items():
+        render_gif(name, title)
