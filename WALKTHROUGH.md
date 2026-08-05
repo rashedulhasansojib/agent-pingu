@@ -20,7 +20,7 @@ A folder under a skills directory containing `.claude-plugin/plugin.json` is
 discovered in place. There is no install step and no marketplace.
 
 ```bash
-git clone <this repo> ~/.claude/skills/agent-pingu
+git clone https://github.com/rashedulhasansojib/agent-pingu.git ~/.claude/skills/agent-pingu
 ```
 
 Developing the plugin itself? Symlink instead, so your edits apply live:
@@ -37,7 +37,7 @@ claude plugin list
 
 ```
 ❯ agent-pingu@skills-dir
-  Version: 0.3.0
+  Version: 0.4.0
   Scope: user
   Path: ~/.claude/skills/agent-pingu
   Status: ✔ loaded

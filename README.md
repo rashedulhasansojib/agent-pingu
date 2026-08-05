@@ -18,9 +18,9 @@ Any folder under a skills directory that contains `.claude-plugin/plugin.json`
 loads as a plugin — no marketplace, no install step. So put this there:
 
 ```bash
-git clone <this repo> ~/.claude/skills/agent-pingu        # personal
+git clone https://github.com/rashedulhasansojib/agent-pingu.git ~/.claude/skills/agent-pingu        # personal
 # or, into a repo, to share it with the team through git:
-git clone <this repo> <your repo>/.claude/skills/agent-pingu
+git clone https://github.com/rashedulhasansojib/agent-pingu.git <your repo>/.claude/skills/agent-pingu
 ```
 
 Restart Claude Code and confirm with `claude plugin list` — you should see

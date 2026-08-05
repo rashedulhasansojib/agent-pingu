@@ -551,6 +551,34 @@ def test_the_install_instructions_reference_something_that_exists(doc):
             f"{doc} says to unzip {artifact}, which nothing in this repo builds")
 
 
+@pytest.mark.parametrize("doc", ["README.md", "MANUAL.md", "WALKTHROUGH.md"])
+def test_the_install_instructions_name_a_real_clone_source(doc):
+    """`git clone <this repo>` is not a command. The install said that for the
+    whole life of the project, in the same way it previously said to unzip a
+    file nothing built — plausible-looking, and impossible to run."""
+    text = (PLUGIN_ROOT / doc).read_text(encoding="utf-8")
+    for source in re.findall(r"git clone (\S+)", text):
+        assert not source.startswith("<"), (
+            f"{doc} says `git clone {source}` — a placeholder, not something "
+            f"anyone can run")
+        assert source.startswith("http") or source.startswith("git@"), (
+            f"{doc} clones from {source}, which is not a URL")
+
+
+def test_the_documented_version_matches_the_manifest():
+    """The walkthrough quotes `claude plugin list` output, version included, and
+    it had gone stale by a release."""
+    import json as _json
+    version = _json.loads(
+        (PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
+    text = (PLUGIN_ROOT / "WALKTHROUGH.md").read_text(encoding="utf-8")
+    quoted = re.findall(r"^\s*Version:\s*(\S+)\s*$", text, re.MULTILINE)
+    assert quoted, "WALKTHROUGH no longer quotes a Version line"
+    for shown in quoted:
+        assert shown == version, (
+            f"WALKTHROUGH shows Version: {shown}, manifest says {version}")
+
+
 @pytest.mark.parametrize("doc", ["README.md", "MANUAL.md"])
 def test_the_install_instructions_name_a_skills_directory(doc):
     """A skills-directory plugin only loads from one. If the install section

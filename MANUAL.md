@@ -10,8 +10,8 @@ A folder under a skills directory containing `.claude-plugin/plugin.json` is
 discovered in place — there is nothing to install:
 
 ```bash
-git clone <this repo> ~/.claude/skills/agent-pingu          # personal
-git clone <this repo> <repo>/.claude/skills/agent-pingu     # shared via git
+git clone https://github.com/rashedulhasansojib/agent-pingu.git ~/.claude/skills/agent-pingu          # personal
+git clone https://github.com/rashedulhasansojib/agent-pingu.git <repo>/.claude/skills/agent-pingu     # shared via git
 ```
 
 Restart Claude Code. Confirm with `claude plugin list` — you should see `agent-pingu@skills-dir`.
