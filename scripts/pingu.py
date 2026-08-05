@@ -443,8 +443,14 @@ def cmd_status(vault, quiet=False):
 
     if todo:
         names = ", ".join(sorted(n["path"].name for n in todo))
-        print(f"[pingu] SETUP NEEDED — still templates: {names}")
-        print("[pingu] every phase loads these; run the setup skill to draft them from this repo")
+        if (vault / SETUP_DECLINED).is_file():
+            # Asked and answered. Repeating the offer every session contradicts
+            # the decision in front of the person who made it.
+            print(f"[pingu] setup declined — running on generic defaults ({names})")
+            print(f"[pingu] delete {SETUP_DECLINED} in the vault to be asked again")
+        else:
+            print(f"[pingu] SETUP NEEDED — still templates: {names}")
+            print("[pingu] every phase loads these; run the setup skill to draft them from this repo")
 
     tasks = [n for n in notes if n["type"] == "task"]
     if tasks:
@@ -472,6 +478,88 @@ def cmd_status(vault, quiet=False):
         ids = ", ".join(str(t.get("id")) for t in unsynced[:8])
         more = f" (+{len(unsynced) - 8} more)" if len(unsynced) > 8 else ""
         print(f"[pingu] not mirrored to GitHub: {ids}{more}")
+    return 0
+
+
+# ------------------------------------------------------------------ setup guard
+
+SETUP_DECLINED = ".setup-declined"
+
+# Tools that put new content into the repo. Reading is never blocked: setup works
+# by reading, and so does deciding whether setup is worth doing at all.
+EDITING_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+
+
+def cmd_guard(vault):
+    """Refuse edits outside the vault while the vault is still templates.
+
+    The router already says to stop and offer setup first. That is advice, and
+    advice held in one headless run and not in another against a near-identical
+    repo — the second spent ten minutes implementing a feature against template
+    standards, which is the exact output the vault exists to prevent. An
+    instruction that works most of the time is the worst failure rate to debug.
+
+    This repo's own argument is that the model is the one party that cannot be
+    trusted to say whether it met its own gate. The setup gate was the last one
+    still asking it.
+
+    Fails open on anything unexpected. It runs in front of every edit in every
+    project a personal-scope plugin loads into, so a bug that blocked writing
+    would cost far more than this protection is worth.
+    """
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+        if payload.get("tool_name") not in EDITING_TOOLS:
+            return 0
+        if (vault / SETUP_DECLINED).is_file():
+            return 0                    # asked and answered
+        # Covers both "no vault here" and "vault is filled in": load_notes on a
+        # missing directory returns [], so a repo that never asked for a vault
+        # falls through the same allow as one that is set up. An explicit
+        # is_dir() check read better and was redundant — no test could tell it
+        # from its absence, which by this repo's own rule means it goes.
+        todo = unfilled(load_notes(vault))
+        if not todo:
+            return 0
+
+        target = (payload.get("tool_input") or {}).get("file_path") or ""
+        if target:
+            try:
+                # Setup must be able to write the files that are blocking setup.
+                Path(target).resolve().relative_to(vault.resolve())
+                return 0
+            except ValueError:
+                pass
+        names = ", ".join(sorted(n["path"].name for n in todo))
+    except Exception:
+        return 0
+
+    print(
+        "Blocked by agent-pingu: this repo's vault is still templates "
+        f"({names}).\n"
+        "Every phase loads those files, so building against them produces the "
+        "generic work the vault exists to prevent.\n\n"
+        "Run the setup skill to draft them from this repo, or "
+        "`pingu setup-decline` to record that you are skipping it — either way "
+        "this stops asking.",
+        file=sys.stderr,
+    )
+    return 2
+
+
+def cmd_setup_decline(vault):
+    if not vault.is_dir():
+        print(f"no vault at {vault}", file=sys.stderr)
+        return 1
+    marker = vault / SETUP_DECLINED
+    marker.write_text(
+        f"Setup was declined on {date.today().isoformat()}.\n\n"
+        "The standards, context index and glossary are still templates, so the "
+        "loop runs on generic defaults. Delete this file to be asked again.\n",
+        encoding="utf-8",
+    )
+    print(f"recorded: {marker}")
+    print("the loop will not raise setup again in this repo")
     return 0
 
 
@@ -1036,6 +1124,10 @@ def main(argv):
         return cmd_status(vault, quiet)
     if cmd == "doctor":
         return cmd_doctor(vault)
+    if cmd == "guard":
+        return cmd_guard(vault)
+    if cmd == "setup-decline":
+        return cmd_setup_decline(vault)
     if cmd == "vault-path":
         # vault_init.sh asks this rather than resolving vault_dir itself, so the
         # scaffolder and the tooling cannot end up pointed at different

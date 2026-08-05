@@ -157,6 +157,7 @@ agents/           each runs in its own context, which is the point of them
 
 bin/              on the Bash tool's PATH, so skills call these by name
   pingu           status | doctor | gate | next-id | new | vault-path
+                  guard | setup-decline
   gh-sync         push | status | pull
   vault-init      scaffolds docs/vault/
 
@@ -167,6 +168,7 @@ scripts/          the implementations behind bin/
 
 hooks/
   hooks.json      SessionStart — puts `pingu status` in front of every session
+                  PreToolUse  — refuses edits while the vault is templates
 
 templates/        Obsidian templates, for writing a note by hand
   brief.md  task.md  adr.md
@@ -218,6 +220,8 @@ the `vault` skill for that tree.
 **Plugin options are read from the settings file, not substituted.** The two mechanisms that look right both fail silently: `${user_config.KEY}` does not interpolate in a skill body — it reaches the model as that literal string — and `CLAUDE_PLUGIN_OPTION_*` is not exported to the Bash tool. All three options here were no-ops until this was checked against a real session. They now resolve through one function that reads `pluginConfigs` directly, and `pingu status` states the autonomy level every session so it is visible rather than assumed. Put the setting in `<repo>/.claude/settings.json` and commit it if a team should share it.
 
 **Setup is not autonomous.** Reading a repo tells you what the code does, never what the team agreed. Setup drafts the first from evidence, marks it as inferred, and asks about the second.
+
+**The setup gate is enforced, not requested.** It used to be an instruction in the router: stop and offer setup while the vault is templates. Two headless runs against near-identical repos did opposite things — one stopped and reported the gate blocked, the other spent ten minutes building the feature against template standards. The instruction was fine; advice that holds most of the time is just the worst failure rate to debug. A `PreToolUse` hook now refuses edits outside the vault until setup is done or explicitly declined, which is the same argument this README makes about every other gate. Writes *inside* the vault stay allowed, or setup could not fix the thing blocking setup, and a repo with no vault is never touched.
 
 **Nothing requires anything else.** Every skill works standalone — `/agent-pingu:adr` without a plan, `/agent-pingu:diagnose` without the loop. The loop is a convenience, not a cage. (Plugin skills are namespaced by plugin name; that prefix is not optional.)
 

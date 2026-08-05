@@ -25,6 +25,8 @@ If status reports `SETUP NEEDED`, the vault's standards, context index, and glos
 
 Stop and offer `setup` before starting new work, even on `full-loop`. This is the one place autonomy is the wrong answer: the standards encode what the team agreed, and no amount of reading the repo tells you what people decided but never wrote down. Say plainly what is unfilled and that you can draft it by reading this repo, then wait.
 
+You will not get the choice quietly wrong — a `PreToolUse` hook refuses edits outside the vault until setup is done or declined, so an attempt to start building returns a blocked-tool message rather than a half-configured run. Do not work around it by writing through Bash; the block is the gate doing its job. If the person wants to skip setup, run `pingu setup-decline`, note it in the run log, and carry on.
+
 Two exceptions. If the person declines, note it in the run log and continue — their call, and nagging twice is worse than generic output. And if work is already in flight, finish it rather than interrupting mid-task; raise setup at the end.
 
 ## Pick the lane

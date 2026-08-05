@@ -47,7 +47,22 @@ Setup reads your repo — package manifest, test config, linter and CI rules, di
 
 It marks inferred lines as inferred and agreed lines as agreed, so you can tell evidence from assumption when you review it. It takes a few minutes and it is the difference between the loop producing your team's work and producing generic work.
 
-You can decline. The loop notes it and carries on, and won't nag twice.
+You can decline — `pingu setup-decline` records it in the vault and stops the
+loop raising it again. Until you do one or the other, edits outside the vault are
+refused:
+
+```
+Blocked by agent-pingu: this repo's vault is still templates (context.md, ...).
+Every phase loads those files, so building against them produces the generic
+work the vault exists to prevent.
+
+Run the setup skill to draft them from this repo, or `pingu setup-decline` to
+record that you are skipping it — either way this stops asking.
+```
+
+That is a hook, not a suggestion, because the suggestion did not reliably hold.
+Reading is never blocked, writes inside the vault are never blocked, and a repo
+with no vault is never affected.
 
 Requirements: Python 3, git, and an authenticated `gh` CLI if you want Issue mirroring. Obsidian needs the Dataview plugin for the board.
 
@@ -177,6 +192,7 @@ pingu doctor              # validate the vault before a PR
 pingu gate [phase]        # evaluate a phase's exit condition
 pingu next-id task        # reserve the next free ID
 pingu vault-path          # where the vault resolved to
+pingu setup-decline       # record that you are skipping setup
 pingu new adr "Title"     # scaffold a note, print its path
 
 gh-sync push             # create Issues for new tasks
