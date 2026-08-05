@@ -30,8 +30,9 @@ From the environment:
                             falls back to `git rev-parse --show-toplevel`
   PINGU_STATE_MAX_BLOCKED   cap on blocked lines printed by status (default 5)
 
-No third-party dependencies, so it runs wherever Python 3 does. The tests need
-pytest; the tooling itself does not.
+No third-party dependencies, so it runs wherever Python 3 does — POSIX-only
+calls are guarded rather than assumed. The tests need pytest and PyYAML; the
+tooling itself needs neither.
 """
 
 import json
@@ -502,8 +503,14 @@ def _reservations(vault):
         # both the settings naming a vault_dir and a symlinked .gitignore inside
         # it. The text appended is fixed, so this is file corruption rather than
         # execution — but it should not write through a link at all.
+        #
+        # POSIX-only. Reading it unguarded raised AttributeError on Windows
+        # before anything else ran, and CI is Linux-only so nothing caught it.
+        # Degrade rather than crash: a platform without the flag loses this one
+        # protection and keeps a working allocator.
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
         try:
-            fd = os.open(str(ignore), os.O_CREAT | os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+            fd = os.open(str(ignore), os.O_CREAT | os.O_WRONLY | os.O_TRUNC | nofollow, 0o644)
         except OSError:
             pass  # A symlink, or an unwritable vault. Reservations still work.
         else:

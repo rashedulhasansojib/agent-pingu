@@ -205,3 +205,29 @@ def test_a_repo_may_tighten_autonomy(repo, tmp_path, monkeypatch):
     monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_AUTONOMY", raising=False)
 
     assert pingu.autonomy()[0] == "gated"
+
+
+# ------------------------------------------------------- runs where Python does
+
+def test_reservations_work_without_o_nofollow(vault, monkeypatch):
+    """`os.O_NOFOLLOW` is POSIX-only — it does not exist on Windows, where the
+    plain attribute access would raise AttributeError before anything else ran.
+    CI is Linux-only, so nothing here would have caught it.
+
+    The symlink hardening degrades rather than crashing: a platform without the
+    flag loses that one protection and keeps a working allocator.
+    """
+    monkeypatch.delattr("os.O_NOFOLLOW", raising=False)
+    assert pingu.allocate_id(vault, "task") == "T-0001"
+    assert (vault / ".gitignore").is_file()
+
+
+def test_the_symlink_guard_is_still_applied_where_it_exists(vault, tmp_path):
+    """The fallback must not quietly disable the protection on platforms that
+    do support it."""
+    target = tmp_path / "victim.txt"
+    target.write_text("SECRET=hunter2\n", encoding="utf-8")
+    (vault / ".gitignore").symlink_to(target)
+
+    pingu.allocate_id(vault, "task")
+    assert target.read_text(encoding="utf-8") == "SECRET=hunter2\n"

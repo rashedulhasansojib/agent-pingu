@@ -51,6 +51,11 @@ Restart Claude Code, then say **"set up the vault"**. The loop reads your repo a
 
 Needs Python 3, git, and `gh` for Issue mirroring. Obsidian needs Dataview for the board.
 
+**Platforms.** The Python tooling has no dependencies and runs wherever Python 3
+does. `bin/` and `vault_init.sh` are bash, so Windows needs Git Bash or WSL.
+Verified on Linux by CI (3.9 and 3.13) and on macOS in development; Windows is
+untested rather than known-good, and this says so instead of implying otherwise.
+
 ## Lanes
 
 The loop picks one from the request rather than forcing everything through a feature pipeline.
