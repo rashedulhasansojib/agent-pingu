@@ -498,6 +498,27 @@ def test_the_layout_block_lists_every_directory_that_ships():
     assert not missing, f"README's layout block never lists: {', '.join(missing)}"
 
 
+def test_this_repos_own_working_notes_stay_out_of_the_repo():
+    """README's "Built with itself" section says the vault this repo runs on
+    stays local. It was published once by accident, and removing it afterwards
+    needed a history rewrite and a repo recreation — a force-push alone left the
+    content readable by SHA. Cheaper to make it impossible to add back.
+
+    This does not constrain the vaults the plugin creates in *user* repos, which
+    are meant to be committed alongside the code they describe.
+    """
+    tracked = tracked_files("docs")
+    assert not tracked, (
+        "this repo's own vault is tracked again: " + ", ".join(tracked[:5]) +
+        " — it holds working notes about building the plugin, not part of what "
+        "ships. Keep it gitignored.")
+
+    ignore = (PLUGIN_ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert re.search(r"^docs/?$", ignore, re.MULTILINE), (
+        ".gitignore no longer covers docs/, so the next `git add -A` publishes "
+        "this repo's working notes")
+
+
 def test_the_layout_block_does_not_invent_directories():
     """The inverse: everything the diagram claims must actually be there."""
     claimed = set(re.findall(r"^([a-z._-]+)/", layout_block(), re.MULTILINE))

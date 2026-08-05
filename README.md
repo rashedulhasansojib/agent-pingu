@@ -188,6 +188,39 @@ the `vault` skill for that tree.
 
 **Nothing requires anything else.** Every skill works standalone — `/agent-pingu:adr` without a plan, `/agent-pingu:diagnose` without the loop. The loop is a convenience, not a cage. (Plugin skills are namespaced by plugin name; that prefix is not optional.)
 
+## Built with itself
+
+This plugin is developed using its own loop. That is the only claim here worth
+much: a tool that tells you to keep decisions in a vault and gates behind a
+runner, and doesn't, is arguing from theory.
+
+`vault-init` runs on this repo, `pingu doctor` runs before a push, and the phases
+produce the same artifacts they produce anywhere else — decision records for the
+choices below, standards marked *observed* or *agreed*, a retro after each run.
+Those notes stay local. They are working notes about building the plugin rather
+than part of what it does, and a published repo is not the place for them.
+
+What is worth reporting is what the loop caught in its own code:
+
+- **`verify` found two blocking defects** in code that had been written
+  test-first and was passing every test. The four reviewers run blind to each
+  other and there was almost no overlap in what they found — the separation is
+  doing the work, not the redundancy.
+- **A "fixed" concurrency bug that wasn't.** ID allocation was verified with one
+  clean run of sixteen concurrent writers and reported as done. A reviewer found
+  the mechanism by reading it; thirty trials reproduced a duplicate at 1 in 30.
+  One run is not a concurrency test.
+- **Three settings that silently did nothing.** `${user_config.KEY}` does not
+  interpolate in a skill body, so every option this plugin declared was dead
+  while two documents described one of them as working.
+- **A suite inherits its author's blind spot.** Every `done`/`rm` test used a
+  single-item collection, so "act on the item with this id" and "act on the first
+  item" were the same code path. Eighteen tests, zero protection.
+
+Each of those became a test that fails if it comes back. The `manual-review`
+verdict exists because of this: the checks a tool cannot decide are exactly the
+ones that were wrong.
+
 ## Tests
 
 ```bash
