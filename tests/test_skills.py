@@ -7,6 +7,7 @@ lever that actually decides it.
 """
 
 import re
+import subprocess
 
 import pytest
 
@@ -492,8 +493,20 @@ def test_the_layout_block_does_not_invent_directories():
 def test_the_layout_block_names_the_real_scripts_and_bin_entries():
     block = layout_block()
 
-    for path in sorted((PLUGIN_ROOT / "bin").iterdir()) + sorted((PLUGIN_ROOT / "scripts").iterdir()):
-        assert path.name in block, f"{path.parent.name}/{path.name} is missing from the layout"
+    # Only what git tracks. Iterating the directory picked up `__pycache__`,
+    # which pytest creates in `scripts/` while importing the modules under test —
+    # so the test demanded the README document a build artifact, and passed or
+    # failed depending on whether the cache happened to exist yet. It survived
+    # every local run and failed on CI's clean checkout, first push.
+    tracked = subprocess.run(
+        ["git", "ls-files", "bin", "scripts"],
+        cwd=PLUGIN_ROOT, capture_output=True, text=True, check=True,
+    ).stdout.split()
+    assert tracked, "git lists nothing under bin/ or scripts/"
+
+    for name in tracked:
+        leaf = name.rsplit("/", 1)[-1]
+        assert leaf in block, f"{name} is missing from the layout"
 
 
 def vault_dirs_created():
