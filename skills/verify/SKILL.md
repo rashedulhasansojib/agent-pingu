@@ -27,6 +27,16 @@ You are the last thing between an autonomous run and a human's time. Assume the 
 
 **The suite** — full run, not the fast subset. Record the actual result. If something is flaky, name it rather than re-running until it passes.
 
+## Dispatching them
+
+Send all four in a **single message** so they run in parallel — they are independent and the slowest one sets the wall clock either way. Dispatch by the plugin-qualified name, `agent-pingu:reviewer-standards` and so on; the bare name does not resolve, and agents are only registered in a session started after the plugin was installed. If they are missing, say so and stop rather than reviewing the diff yourself — a self-review is the thing this phase exists to replace.
+
+**Freeze the tree while they read.** Do not commit, edit, or revert anything between dispatching and collecting. Reviewers read the working tree, so a commit landing mid-review makes their findings describe a state that no longer exists — and the honest ones will spend their turns reporting the drift instead of the code. `sqa` is the exception that proves it: it mutates files by design, so it reverts each one and confirms `git status` is clean.
+
+Give each reviewer the vault paths it needs — the brief for `reviewer-spec`, the standards for `reviewer-standards` — and tell `reviewer-standards` explicitly *not* to read the brief. Tell all of them that "no findings" is a useful answer and that inventing problems to look thorough is worse than silence.
+
+Hand them the previous packet's **uncertainty list** if there is one. Reviewers dismiss some with reasons and deepen others, and that is often worth more than what they find unprompted.
+
 ## Findings
 
 Write findings as severities: blocking, should-fix, and noted. Be specific about what and where. "Error handling could be better" is not a finding; "the retry in client.py swallows the 429 and logs nothing" is.

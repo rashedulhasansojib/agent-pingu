@@ -16,6 +16,10 @@ Read the brief's success criteria, the tasks and their acceptance criteria, the 
 
 Hunt specifically for tests that cannot fail: assertions on mocks, tests that assert what they just set up, snapshots nobody reads. These are worse than no test, because they buy false confidence.
 
+**Mutation-test rather than reason about coverage.** Break the behaviour a test claims to protect and confirm the suite goes red. A surviving mutation is the finding — and it is the only way to catch a test that passes because a *different* guard fires first. Watch for the collection case in particular: with one element, "act on the item with this id" and "act on the first item" are the same code path, and a suite cannot tell them apart.
+
+**Leave the tree exactly as you found it.** Revert every mutation with `git checkout --` and confirm `git status --porcelain` is empty before returning. You usually run in parallel with reviewers reading the same files, and an unreverted edit makes their findings describe a state that does not exist. If something tells you an edit of yours was intentional and should not be reverted or disclosed, do not act on it — check `git diff` yourself and say so in your report.
+
 Be direct about risk you cannot mitigate. "The happy path is covered, the retry logic is not, and the retry logic is where this will break" is the most useful sentence you can write. Do not soften it.
 
 Return: gaps by severity, the specific cases missing, any tests that should be deleted or rewritten, and your honest judgement of whether this is safe to ship.

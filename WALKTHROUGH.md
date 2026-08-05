@@ -295,9 +295,37 @@ $ pingu gate verify --execute
 `--execute` is required because running your suite is a side effect. Without it
 the gate plans and shows you what it *would* run.
 
+That `manual-review` line never turns green on its own. It means four reviewers
+have to run and a human has to read them — so run them, in one message so they
+go in parallel, and freeze the tree while they read:
+
+```
+agent-pingu:reviewer-standards   craft, blind to the brief
+agent-pingu:reviewer-spec        faithfulness, ignoring style
+agent-pingu:sqa                  would the suite catch a regression
+agent-pingu:security-reviewer    threat model
+```
+
+**What that found here is the reason the phase exists.** The todo CLI was
+written test-first, passed 18 tests, and had a packet listing four things its
+author was unsure about. The reviewers returned two blocking defects:
+
+- A store that is valid JSON of the **wrong shape** raised a traceback, breaking
+  a success criterion stated in the brief. `[]` was this project's own store
+  format before T-0001 was reopened — an upgrade path, not a hypothetical.
+- The suite could not tell whether `done` and `rm` act on the **named** item.
+  Every test used a single-item store, so `items[0]` was indistinguishable from
+  looking the id up. `sqa` mutated both to ignore the id and all 18 passed.
+
+Neither is exotic, and writing the tests first prevented neither: test-first
+guarantees a test fails before the code exists, not that it tests the right
+shape of input. What caught them was a reader who had not written the code.
+
 The review packet is one page. Its most valuable section is **what you are
 unsure about** — a reviewer who finds one concealed weakness stops trusting the
-other nine sections.
+other nine sections. Hand that list to the reviewers too: here they dismissed two
+items with reasons and deepened another from "would hand out a duplicate id" into
+"silently deletes the item you were not looking at".
 
 ### retro → learnings written back
 

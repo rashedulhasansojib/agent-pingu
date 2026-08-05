@@ -423,6 +423,26 @@ def test_the_router_dispatches_agents_by_their_namespaced_name():
         "start/SKILL.md should show the prefix on subagent_type specifically")
 
 
+@pytest.mark.parametrize("skill", ["start", "verify"])
+def test_a_skill_that_dispatches_agents_names_the_prefix(skill):
+    """`verify` is where the four reviewers are actually dispatched, so it needs
+    the namespacing rule as much as the router does — a bare `reviewer-standards`
+    is rejected outright and the whole phase silently does nothing."""
+    text = (PLUGIN_ROOT / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+    assert f"{PLUGIN_NAME}:" in text, (
+        f"{skill}/SKILL.md dispatches agents but never shows the {PLUGIN_NAME}: prefix")
+
+
+def test_verify_says_to_freeze_the_tree():
+    """Reviewers read the working tree. A commit landing mid-review makes their
+    findings describe a state that no longer exists — which happened on the first
+    real run, and cost one reviewer most of its report."""
+    text = (PLUGIN_ROOT / "skills" / "verify" / "SKILL.md").read_text(encoding="utf-8")
+    assert re.search(r"[Ff]reeze the tree", text), (
+        "verify/SKILL.md no longer tells the phase to hold the tree still while "
+        "the reviewers read it")
+
+
 @pytest.mark.parametrize("name", AGENT_NAMES)
 def test_every_agent_the_router_names_actually_exists(name):
     """The table is hand-written; a renamed agent file would leave it pointing
