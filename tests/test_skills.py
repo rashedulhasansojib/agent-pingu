@@ -334,6 +334,76 @@ def test_skill_invocations_use_the_current_namespace(doc):
         assert match == PLUGIN_NAME, f"{doc} documents /{match}: — should be /{PLUGIN_NAME}:"
 
 
+def fenced_blocks(text):
+    """Every fenced block's body.
+
+    Scans line by line rather than pairing ``` with a regex: the naive pattern
+    only matches fences opened with a bare ```, so a ```bash block earlier in
+    the file shifts every subsequent pair and the block you wanted is never
+    seen. That is not hypothetical — the first version of the test below matched
+    zero blocks and passed happily.
+    """
+    blocks, current = [], None
+    for line in text.splitlines():
+        if line.startswith("```"):
+            if current is None:
+                current = []
+            else:
+                blocks.append("\n".join(current))
+                current = None
+        elif current is not None:
+            current.append(line)
+    return blocks
+
+
+def test_documented_status_output_matches_what_status_prints(repo, run_pingu, capsys):
+    """Transcripts in the docs go stale silently, because nothing runs them.
+
+    The walkthrough showed a `pingu status` block that predated the autonomy
+    line, so it described output the tool no longer produces — and autonomy was
+    the very thing that had just been fixed. Compare against a real run.
+    """
+    # Most status lines depend on vault state — SETUP NEEDED, blocked tasks,
+    # unsynced IDs — and a transcript of one state should not have to show
+    # another's. Derive the lines that appear regardless by running against two
+    # real vaults in different states and intersecting, rather than assuming
+    # which ones those are.
+    import pingu
+
+    run_pingu("status")
+    seeded = {l.split(":")[0] + ":" for l in capsys.readouterr().out.splitlines()
+              if l.startswith("[pingu]")}
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setenv("CLAUDE_PROJECT_DIR", str(PLUGIN_ROOT))
+    pingu.main(["pingu.py", "status"])
+    monkey.undo()
+    filled_out = capsys.readouterr().out
+    filled = {l.split(":")[0] + ":" for l in filled_out.splitlines()
+              if l.startswith("[pingu]")}
+
+    required = seeded & filled
+    real = [l for l in filled_out.splitlines() if l.startswith("[pingu]")]
+    assert "[pingu] autonomy:" in required, "status no longer always reports autonomy"
+
+    checked = 0
+    for doc in ("WALKTHROUGH.md", "MANUAL.md", "README.md"):
+        text = (PLUGIN_ROOT / doc).read_text(encoding="utf-8")
+        for block in fenced_blocks(text):
+            # Any block quoting a status line, not only those in the current
+            # format: MANUAL showed `[pingu] phase: setup` from an older shape,
+            # which a stricter match skipped and so never flagged as stale.
+            if not any(l.startswith("[pingu]") and "phase:" in l
+                       for l in block.splitlines()):
+                continue
+            checked += 1
+            missing = [p for p in required if p not in block]
+            assert not missing, (
+                f"{doc} shows a `pingu status` transcript missing {missing}. "
+                f"A real run prints: {real}")
+    assert checked, "no status transcript found to check — has the doc changed shape?"
+
+
 AGENT_NAMES = sorted(p.stem for p in (PLUGIN_ROOT / "agents").glob("*.md"))
 
 

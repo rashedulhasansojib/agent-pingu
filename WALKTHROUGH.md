@@ -60,6 +60,11 @@ and it only loads when Claude Code starts from that directory.
 `pingu: command not found`, that is why. Restart, or call
 `~/.claude/skills/agent-pingu/scripts/pingu.py` directly.
 
+The same applies to the agents, and they are namespaced: the dispatch name is
+`agent-pingu:reviewer-standards`, not `reviewer-standards`. A session that was
+already running when you installed the plugin will not see them at all, which
+makes the whole `verify` phase quietly do nothing.
+
 ---
 
 ## 2. Check it works
@@ -159,7 +164,9 @@ Now start Claude Code in that directory. The hook reports:
 
 ```
 [pingu] vault: vault   lane: feature   phase: setup   (vault seeded but not filled in)
+[pingu] autonomy: full-loop — runs the whole lane, then stops once for review
 [pingu] SETUP NEEDED — still templates: context.md, engineering.md, glossary.md, security.md
+[pingu] every phase loads these; run the setup skill to draft them from this repo
 ```
 
 Say **"set up the vault"** and answer its questions.
@@ -309,6 +316,7 @@ while a test was red:
 ```
 $ pingu status
 [pingu] vault: vault   lane: feature   phase: done   (loop closed)
+[pingu] autonomy: full-loop — runs the whole lane, then stops once for review
 $ pingu doctor
 vault ok — 14 notes, no problems found
 ```

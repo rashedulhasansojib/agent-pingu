@@ -2,12 +2,20 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "agent-pingu",
   "displayName": "Agent Pingu",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Vault-backed engineering loop for any development work: talk, research, ADR, plan, diagnose, execute, verify, retro. State lives in a project-local Obsidian vault; tasks mirror to GitHub Issues.",
   "author": {
     "name": "Rashedul Hasan"
   },
-  "keywords": ["obsidian", "adr", "planning", "workflow", "agentic", "github", "review"],
+  "keywords": [
+    "obsidian",
+    "adr",
+    "planning",
+    "workflow",
+    "agentic",
+    "github",
+    "review"
+  ],
   "license": "MIT",
   "userConfig": {
     "vault_dir": {

@@ -37,8 +37,10 @@ This creates `docs/vault/` and never overwrites anything that already exists, so
 The seeded notes start as templates. **Start Claude Code in the repo and say "set up the vault"** — or just start any work, and the loop will stop and offer it, because session start reports:
 
 ```
-[pingu] phase: setup   (vault seeded but not filled in)
+[pingu] vault: vault   lane: feature   phase: setup   (vault seeded but not filled in)
+[pingu] autonomy: full-loop — runs the whole lane, then stops once for review
 [pingu] SETUP NEEDED — still templates: context.md, engineering.md, glossary.md, security.md
+[pingu] every phase loads these; run the setup skill to draft them from this repo
 ```
 
 Setup reads your repo — package manifest, test config, linter and CI rules, directory layout, commit history — drafts the standards, context index, and glossary from what the code actually does, then asks you about the parts it cannot infer: your definition of done, your testing bar, what counts as sensitive data here, and which existing patterns you would rather people stopped copying.
