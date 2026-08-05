@@ -369,22 +369,26 @@ def test_documented_status_output_matches_what_status_prints(repo, run_pingu, ca
     # another's. Derive the lines that appear regardless by running against two
     # real vaults in different states and intersecting, rather than assuming
     # which ones those are.
-    import pingu
+    def status_lines():
+        run_pingu("status")
+        return [l for l in capsys.readouterr().out.splitlines() if l.startswith("[pingu]")]
 
-    run_pingu("status")
-    seeded = {l.split(":")[0] + ":" for l in capsys.readouterr().out.splitlines()
-              if l.startswith("[pingu]")}
+    def prefixes(lines):
+        return {l.split(":")[0] + ":" for l in lines}
 
-    monkey = pytest.MonkeyPatch()
-    monkey.setenv("CLAUDE_PROJECT_DIR", str(PLUGIN_ROOT))
-    pingu.main(["pingu.py", "status"])
-    monkey.undo()
-    filled_out = capsys.readouterr().out
-    filled = {l.split(":")[0] + ":" for l in filled_out.splitlines()
-              if l.startswith("[pingu]")}
+    # Both states come from the scaffolded fixture, not from whatever vault this
+    # repo happens to hold. An earlier version read the plugin's own vault and
+    # broke the moment that stopped existing — a test depending on incidental
+    # repo state, which is the thing this whole file exists to prevent.
+    seeded = prefixes(status_lines())
+    for path in (repo / "docs" / "vault").rglob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        if "status: template" in text:
+            path.write_text(text.replace("status: template", "status: ready"), encoding="utf-8")
+    real = status_lines()
+    filled = prefixes(real)
 
     required = seeded & filled
-    real = [l for l in filled_out.splitlines() if l.startswith("[pingu]")]
     assert "[pingu] autonomy:" in required, "status no longer always reports autonomy"
 
     checked = 0
