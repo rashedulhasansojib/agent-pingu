@@ -17,6 +17,8 @@ import pytest
 import gh_sync
 import pingu
 
+from conftest import BASH  # noqa: E402  — see its docstring on Windows and WSL
+
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -91,6 +93,33 @@ def test_unreadable_settings_degrade_to_the_default(home, project):
     path.parent.mkdir(parents=True)
     path.write_text("{ not json at all", encoding="utf-8")
     assert pingu.plugin_option("autonomy", "full-loop") == "full-loop"
+
+
+def test_an_undeterminable_home_degrades_to_the_repo_settings(project, monkeypatch):
+    """`plugin_option` says it never raises, and `settings_files` is called
+    outside the try that makes that true. `Path.home()` raises RuntimeError when
+    no home can be resolved, so the promise held only on machines that have one.
+
+    Found by the widened CI matrix, on Windows, where a test built its own `env`
+    with `HOME` set and nothing else — and `ntpath.expanduser` reads `USERPROFILE`.
+    The cause is contrived; the consequence is not. This is the SessionStart hook,
+    and the two repo-scoped settings files that could have answered were never
+    reached.
+    """
+    def no_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(pingu.Path, "home", staticmethod(no_home))
+
+    local = project / ".claude" / "settings.local.json"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text(
+        '{"pluginConfigs": {"agent-pingu": {"options": {"autonomy": "gated"}}}}',
+        encoding="utf-8",
+    )
+    assert pingu.plugin_option("autonomy", "full-loop") == "gated"
+    # And the personal-scope lookup, which has nothing else to fall back to.
+    assert pingu.plugin_option("autonomy", "full-loop", scope="user") == "full-loop"
 
 
 def test_a_corrupt_higher_precedence_file_falls_through_to_a_valid_one(home, project):
@@ -204,7 +233,7 @@ def test_vault_init_puts_the_vault_where_settings_say(home, tmp_path):
     env.pop("CLAUDE_PLUGIN_OPTION_VAULT_DIR", None)
     env.pop("VAULT_DIR", None)
     subprocess.run(
-        ["bash", str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
+        [BASH, str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
         cwd=fresh, check=True, capture_output=True, env=env,
     )
     assert (fresh / "docs" / "knowledge" / "context.md").is_file()
@@ -221,7 +250,7 @@ def test_an_explicit_vault_dir_env_var_still_overrides_settings(home, tmp_path):
 
     env = dict(os.environ, HOME=str(home), VAULT_DIR="docs/elsewhere")
     subprocess.run(
-        ["bash", str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
+        [BASH, str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
         cwd=fresh, check=True, capture_output=True, env=env,
     )
     assert (fresh / "docs" / "elsewhere" / "context.md").is_file()
