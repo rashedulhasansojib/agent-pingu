@@ -17,7 +17,7 @@ import pytest
 import gh_sync
 import pingu
 
-from conftest import BASH  # noqa: E402  — see its docstring on Windows and WSL
+from conftest import BASH, set_home  # noqa: E402  — see their docstrings on Windows
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
@@ -35,7 +35,7 @@ def home(tmp_path, monkeypatch):
     """An empty HOME, so a real ~/.claude/settings.json cannot leak in."""
     fake = tmp_path / "home"
     fake.mkdir()
-    monkeypatch.setenv("HOME", str(fake))
+    set_home(monkeypatch, fake)
     # Every option, not the two that happened to be under test: plugin_option
     # checks the env var first, so an ambient CLAUDE_PLUGIN_OPTION_GH_REPO made
     # test_no_gh_repo_means_gh_uses_the_git_remote fail against a clean repo.
@@ -120,6 +120,30 @@ def test_an_undeterminable_home_degrades_to_the_repo_settings(project, monkeypat
     assert pingu.plugin_option("autonomy", "full-loop") == "gated"
     # And the personal-scope lookup, which has nothing else to fall back to.
     assert pingu.plugin_option("autonomy", "full-loop", scope="user") == "full-loop"
+
+
+def test_the_autonomy_floor_is_absent_when_no_home_resolves(project, monkeypatch):
+    """A documented limit, pinned so it cannot become an undocumented one.
+
+    ADR-0004 rule 2 says a repo may tighten autonomy but never loosen it, and
+    implements that by reading the personal file at `scope="user"`. With no home
+    there is no personal file to read, so `settings_files("user")` is empty, the
+    default comes back, and the floor cannot fire — a repo-committed `full-loop`
+    wins by default rather than by decision.
+
+    Failing closed instead (assume `gated` when the personal scope is
+    unreadable) was considered and rejected here: it would also fire for a
+    merely malformed personal file, where
+    `test_unreadable_settings_degrade_to_the_default` deliberately encodes the
+    opposite instinct. The trade is written into ADR-0004's Consequences rather
+    than left for someone to rediscover from this assertion.
+    """
+    monkeypatch.setattr(pingu.Path, "home", staticmethod(
+        lambda: (_ for _ in ()).throw(RuntimeError("Could not determine home directory."))))
+    write_settings(project / ".claude" / "settings.json", {"autonomy": "full-loop"})
+    monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_AUTONOMY", raising=False)
+
+    assert pingu.autonomy() == ("full-loop", None)
 
 
 def test_a_corrupt_higher_precedence_file_falls_through_to_a_valid_one(home, project):

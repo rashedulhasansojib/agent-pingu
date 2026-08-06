@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 import pingu
-from conftest import PLUGIN_ROOT
+from conftest import NEEDS_O_NOFOLLOW, PLUGIN_ROOT, set_home
 
 
 def note_at(capsys):
@@ -141,6 +141,7 @@ def test_a_vault_dir_inside_the_repo_is_honoured(repo, monkeypatch):
     assert pingu.vault_path() == repo / "docs" / "knowledge"
 
 
+@NEEDS_O_NOFOLLOW
 def test_the_gitignore_write_does_not_follow_a_symlink(vault, tmp_path):
     """Both halves of this are committable to one PR branch: the settings file
     naming a vault_dir, and a symlinked .gitignore inside it. The appended text
@@ -183,7 +184,7 @@ def test_a_repo_cannot_loosen_the_autonomy_a_user_asked_for(repo, tmp_path, monk
     (repo / ".claude" / "settings.json").write_text(json.dumps(
         {"pluginConfigs": {"agent-pingu@skills-dir": {"options": {"autonomy": "full-loop"}}}}),
         encoding="utf-8")
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, home)
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
     monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_AUTONOMY", raising=False)
 
@@ -200,7 +201,7 @@ def test_a_repo_may_tighten_autonomy(repo, tmp_path, monkeypatch):
     (repo / ".claude" / "settings.json").write_text(json.dumps(
         {"pluginConfigs": {"agent-pingu@skills-dir": {"options": {"autonomy": "gated"}}}}),
         encoding="utf-8")
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, home)
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
     monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_AUTONOMY", raising=False)
 

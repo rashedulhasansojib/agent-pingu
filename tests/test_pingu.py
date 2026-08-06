@@ -3,7 +3,7 @@
 import pytest
 
 import pingu
-from conftest import PLUGIN_ROOT, write_note
+from conftest import PLUGIN_ROOT, POSIX_ONLY, write_note
 
 
 # --------------------------------------------------------------- status resilience
@@ -252,6 +252,7 @@ def test_every_documented_command_has_an_executable_wrapper(command):
     assert os.access(wrapper, os.X_OK), f"bin/{command} is not executable"
 
 
+@POSIX_ONLY
 def test_wrappers_run_from_a_subdirectory_of_the_repo(repo):
     """The wrapper must find the vault by walking up to the repo root, since
     CLAUDE_PROJECT_DIR is absent for ordinary Bash tool calls."""
