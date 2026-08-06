@@ -26,7 +26,7 @@ silence the warning.
 
 ## Docs and code are coupled, and tests enforce it
 
-Four pairs must move together. `tests/test_skills.py` fails if any drifts:
+Five pairs must move together. `tests/test_skills.py` fails if any drifts:
 
 | Change this | Also change this |
 |---|---|
@@ -34,6 +34,7 @@ Four pairs must move together. `tests/test_skills.py` fails if any drifts:
 | `GATES` in `scripts/pingu.py` | the gate table in `skills/start/SKILL.md` |
 | a directory that ships | the layout block in `README.md` |
 | a `mkdir` in `scripts/vault_init.sh` | the vault tree in `MANUAL.md` |
+| the CI matrix in `.github/workflows/test.yml` | the `**Platforms.**` paragraph in `README.md` |
 
 This is the project's main quality mechanism. When you add a guard like these,
 **mutation-test it** — break the thing it watches and confirm it goes red. Two
@@ -41,6 +42,10 @@ guards here were vacuous when first written: one whose `-k` filter matched an
 assertion message instead of a test name and so ran zero tests, and one whose
 regex matched a heading elsewhere in the file and asserted against an unrelated
 block. A guard you did not watch fail is not a guard.
+
+The platform pair is the newest, and was mutation-tested three ways before it was
+trusted: dropping the Windows cell, dropping the 3.9 cell, and weakening the
+README sentence each turn it red.
 
 ## Frontmatter is fragile in a way nothing warns you about
 
