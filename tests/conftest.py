@@ -25,10 +25,20 @@ def write_note(vault, relpath, **fields):
 def repo(tmp_path):
     """A git repo with a vault scaffolded by the real vault_init.sh."""
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    subprocess.run(
+    result = subprocess.run(
         ["bash", str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
-        cwd=tmp_path, check=True, capture_output=True,
+        cwd=tmp_path, capture_output=True, text=True,
     )
+    # `check=True` here raised a CalledProcessError carrying the exit code and
+    # nothing else, which is the failure this repo's own standard warns about:
+    # capture stderr, so 127 and 1 stay distinguishable. Every test in the suite
+    # depends on this fixture, so when it breaks on a platform nobody is sitting
+    # in front of, its exit code alone is 250 identical errors and no diagnosis.
+    if result.returncode != 0:
+        raise AssertionError(
+            f"vault_init.sh exited {result.returncode}\n"
+            f"--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
+        )
     return tmp_path
 
 
