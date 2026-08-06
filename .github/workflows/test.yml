@@ -7,13 +7,31 @@ on:
 
 jobs:
   pytest:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # The tooling claims to run "wherever Python 3 does" and ships no
-        # dependencies, so prove that across the range rather than on one.
-        python: ["3.9", "3.13"]
+        # dependencies, so prove that across the range *and* across operating
+        # systems. A Linux-only matrix already let one platform bug ship: an
+        # unguarded `os.O_NOFOLLOW` raised AttributeError on Windows before
+        # anything else ran, and a reviewer found it by reading the code because
+        # no runner could.
+        #
+        # Deliberately not a full cross product. Linux carries the version range,
+        # because a 3.9-versus-3.13 difference is an interpreter difference and
+        # shows up anywhere. macOS and Windows run one version each, because what
+        # they are here to test is the operating system. Six cells would take four
+        # times as long to say the same thing.
+        include:
+          - os: ubuntu-latest
+            python: "3.9"
+          - os: ubuntu-latest
+            python: "3.13"
+          - os: macos-latest
+            python: "3.13"
+          - os: windows-latest
+            python: "3.13"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,6 +44,10 @@ jobs:
       - run: python -m pytest tests/ -q
 
   shell:
+    # Stays Linux-only on purpose, and is not an oversight the next reader should
+    # fix: `bin/` and `vault_init.sh` are bash, and running `bash -n` on a Windows
+    # runner would be checking Git Bash's parser rather than anything a user of
+    # this plugin runs. The pytest matrix above is where platform coverage lives.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
