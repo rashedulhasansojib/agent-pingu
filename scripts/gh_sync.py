@@ -33,7 +33,7 @@ from pathlib import Path
 # One definition of where the vault is, shared with pingu.py. Two scripts each
 # resolving it their own way is how `vault_dir` ends up half-implemented.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from pingu import plugin_option, vault_path, yaml_quoted, yaml_scalar  # noqa: E402
+from pingu import plugin_option, repo_root, vault_path, yaml_quoted, yaml_scalar  # noqa: E402
 
 STATUS_LABELS = {
     "todo": "pingu:todo",
@@ -122,11 +122,19 @@ def git_remote_repo():
 
     Deliberately git, not `gh repo view` — `gh` would answer for whatever
     `--repo` we pass it, and the question here is what *this* checkout points at.
+
+    `repo_root()`, not `vault_path().parent.parent`. Walking up from the vault
+    assumes `vault_dir` is exactly two segments deep; it is one option away from
+    being wrong, and `vault_dir: "vault"` lands on the *parent of the checkout*.
+    Reproduced: with a git repo nested inside another, this read the outer repo's
+    remote and the provenance check below compared `gh_repo` against a repository
+    the user never mentioned. `repo_root()` is the one function that answers this,
+    and importing it is cheaper than a second way to be wrong.
     """
     try:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
-            cwd=vault_path().parent.parent, capture_output=True, text=True, timeout=5,
+            cwd=repo_root(), capture_output=True, text=True, timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
         return None

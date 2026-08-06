@@ -26,7 +26,9 @@ silence the warning.
 
 ## Docs and code are coupled, and tests enforce it
 
-Five pairs must move together. `tests/test_skills.py` fails if any drifts:
+Six pairs must move together. `tests/test_skills.py` fails if any of the first
+five drifts; the sixth is pinned in `tests/test_setup_guard.py`, next to the
+guard it protects:
 
 | Change this | Also change this |
 |---|---|
@@ -35,6 +37,7 @@ Five pairs must move together. `tests/test_skills.py` fails if any drifts:
 | a directory that ships | the layout block in `README.md` |
 | a `mkdir` in `scripts/vault_init.sh` | the vault tree in `MANUAL.md` |
 | the CI matrix in `.github/workflows/test.yml` | the `**Platforms.**` paragraph in `README.md` |
+| `EDITING_TOOLS` in `scripts/pingu.py` | the `PreToolUse` matcher in `hooks/hooks.json` |
 
 This is the project's main quality mechanism. When you add a guard like these,
 **mutation-test it** — break the thing it watches and confirm it goes red. Two
@@ -43,9 +46,17 @@ assertion message instead of a test name and so ran zero tests, and one whose
 regex matched a heading elsewhere in the file and asserted against an unrelated
 block. A guard you did not watch fail is not a guard.
 
-The platform pair is the newest, and was mutation-tested three ways before it was
-trusted: dropping the Windows cell, dropping the 3.9 cell, and weakening the
-README sentence each turn it red.
+The platform pair was mutation-tested three ways before it was trusted: dropping
+the Windows cell, dropping the 3.9 cell, and weakening the README sentence each
+turn it red.
+
+The matcher pair is the newest, and is the third guard here to have been vacuous
+when written. The assertion it replaces was `"Write" in m and "Edit" in m`, which
+looks like it checks the list and does not — `"Edit" in "MultiEdit"` is true, so
+a matcher naming only `MultiEdit` passed and neither `MultiEdit` nor
+`NotebookEdit` was ever checked. Set equality, and mutation-tested three ways:
+dropping `NotebookEdit` from the matcher, adding a tool to `EDITING_TOOLS` alone,
+and the exact matcher the old assertion waved through.
 
 ## Frontmatter is fragile in a way nothing warns you about
 

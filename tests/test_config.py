@@ -327,6 +327,70 @@ def test_an_explicit_vault_dir_env_var_still_overrides_settings(home, tmp_path):
     assert (fresh / "docs" / "elsewhere" / "context.md").is_file()
 
 
+def test_a_vault_dir_env_var_that_escapes_the_repo_is_refused(home, tmp_path):
+    """`VAULT_DIR` used to be expanded by the shell as `$REPO/$VAULT_DIR`, which
+    is a second resolver — and the one place it visibly diverged from
+    `vault_path()` is the containment check that keeps a vault inside the repo.
+    Routing it through pingu is what makes this refusal apply to it too."""
+    fresh = tmp_path / "escape"
+    fresh.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=fresh, check=True)
+    outside = tmp_path / "outside"
+
+    env = dict(os.environ, HOME=str(home), VAULT_DIR="../outside")
+    env.pop("CLAUDE_PLUGIN_OPTION_VAULT_DIR", None)
+    result = subprocess.run(
+        [BASH, str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
+        cwd=fresh, check=True, capture_output=True, text=True, env=env,
+    )
+
+    assert not outside.exists(), "vault_init.sh scaffolded outside the repo"
+    assert (fresh / "docs" / "vault" / "context.md").is_file()
+    # Refusing is half of it. Refusing silently is the failure mode this repo
+    # keeps rediscovering, so the message has to reach the caller.
+    assert "outside the repo" in result.stderr
+
+
+def test_vault_init_says_when_an_env_var_vault_will_not_be_found_later(home, tmp_path):
+    """`VAULT_DIR` dies with the process; `pingu` reads the settings files. So the
+    two can agree during scaffolding and disagree in every session afterwards,
+    and the symptom is an empty vault rather than an error. Same trade as the
+    warnings `pingu status` already prints: degrade, but say so."""
+    fresh = tmp_path / "divergent"
+    fresh.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=fresh, check=True)
+
+    env = dict(os.environ, HOME=str(home), VAULT_DIR="docs/knowledge")
+    env.pop("CLAUDE_PLUGIN_OPTION_VAULT_DIR", None)
+    result = subprocess.run(
+        [BASH, str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
+        cwd=fresh, check=True, capture_output=True, text=True, env=env,
+    )
+
+    assert (fresh / "docs" / "knowledge" / "context.md").is_file()
+    assert "vault_dir" in result.stdout and "docs/knowledge" in result.stdout
+    assert "this run only" in result.stdout
+
+
+def test_no_such_notice_when_settings_and_the_env_var_agree(home, tmp_path):
+    """The paired assertion, and it carries as much weight as the notice itself.
+    A warning printed on a correct setup is one nobody reads by the third day."""
+    fresh = tmp_path / "agreeing"
+    fresh.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=fresh, check=True)
+    write_settings(fresh / ".claude" / "settings.json", {"vault_dir": "docs/knowledge"})
+
+    env = dict(os.environ, HOME=str(home), VAULT_DIR="docs/knowledge")
+    env.pop("CLAUDE_PLUGIN_OPTION_VAULT_DIR", None)
+    result = subprocess.run(
+        [BASH, str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
+        cwd=fresh, check=True, capture_output=True, text=True, env=env,
+    )
+
+    assert (fresh / "docs" / "knowledge" / "context.md").is_file()
+    assert "this run only" not in result.stdout
+
+
 # ------------------------------------------------------------------- gh_repo
 
 def test_gh_repo_is_read_from_settings(home, project):

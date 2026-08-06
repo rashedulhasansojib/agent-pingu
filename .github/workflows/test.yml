@@ -41,6 +41,11 @@ jobs:
       # with no dependencies; the tests need a strict one to catch notes that
       # this plugin can read and Obsidian cannot.
       - run: pip install pytest pyyaml
+      # This job is also where the hooks are executed, not just parsed —
+      # `tests/test_hooks_execute.py` runs the command strings out of
+      # hooks.json. Deliberately here rather than as a step of its own: the
+      # always-on surface is the last thing that should be proven on one
+      # platform, and this matrix is what makes it four.
       - run: python -m pytest tests/ -q
 
   shell:

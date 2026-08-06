@@ -279,6 +279,18 @@ drives the tooling against it, so it covers the two scripts agreeing on where
 the vault is and on how frontmatter parses — the places they have drifted apart
 before. `gh` is the only thing stubbed.
 
+It also **runs the hooks**, using the command strings parsed out of
+`hooks/hooks.json` rather than hand-written copies of them: SessionStart has to
+exit 0 and actually report the vault, and the PreToolUse guard has to exit `2` on
+an edit outside a template vault and `0` on one inside it. That exit code is the
+whole gate — the hook protocol reads anything else, including a crash, as
+non-blocking. It ran on all four matrix cells before this existed and proved
+only that the JSON parsed.
+
+What that does **not** cover is Claude Code's own hook execution: it expands
+`${CLAUDE_PLUGIN_ROOT}` itself, and whether it uses a POSIX shell on Windows is
+still open.
+
 PyYAML is a **test** dependency, not a runtime one. The tooling keeps its own
 lenient frontmatter reader precisely so a malformed note degrades instead of
 crashing a session — but that leniency is also what let it write notes no real
@@ -288,6 +300,11 @@ tests point a strict parser at everything this plugin writes.
 ## Extending
 
 Add a phase: drop a folder in `skills/`, add it to the lane table in `skills/start/SKILL.md` **and to `LANES` in `scripts/pingu.py`**, add its gate to the gate table **and to `GATES`**, and add its note type to the schema in `skills/vault/SKILL.md`. `tests/test_skills.py` fails if any of those pairs drift apart, which is the point of it.
+
+Six such pairs are pinned in total — the sixth, `EDITING_TOOLS` against the
+`PreToolUse` matcher in `hooks/hooks.json`, lives in `tests/test_setup_guard.py`
+next to the guard it protects rather than in `test_skills.py`. `CLAUDE.md` lists
+them all.
 
 When you write the gate, reach for a `manual` check rather than approximating one. A gate that pretends to check something it can't is worse than one that says a human has to look.
 
