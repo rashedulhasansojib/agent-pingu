@@ -2,6 +2,7 @@
 so the tests exercise vault_init.sh and the scripts together rather than a mock
 of what we think the vault looks like."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,33 @@ import pytest
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
+
+
+def _bash():
+    """The bash these tests should run `vault_init.sh` under.
+
+    On Windows, bare `bash` resolves to `C:\\Windows\\System32\\bash.exe` — the
+    WSL launcher — which shadows Git Bash on PATH. On a machine with no WSL
+    distribution installed it prints a UTF-16 complaint and exits 1, which is
+    what it did on the first Windows CI run: 250 errors, all of them this.
+
+    `shutil.which` does not help, because the WSL stub is a real executable and
+    is genuinely first. README tells Windows users to bring Git Bash or WSL, so
+    look for Git Bash by name before falling back to whatever PATH offers.
+    """
+    if os.name != "nt":
+        return "bash"
+    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramW6432"),
+                 os.environ.get("ProgramFiles(x86)"), r"C:\Program Files"):
+        if not base:
+            continue
+        candidate = Path(base) / "Git" / "bin" / "bash.exe"
+        if candidate.is_file():
+            return str(candidate)
+    return "bash"
+
+
+BASH = _bash()
 
 
 def write_note(vault, relpath, **fields):
@@ -26,7 +54,7 @@ def repo(tmp_path):
     """A git repo with a vault scaffolded by the real vault_init.sh."""
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     result = subprocess.run(
-        ["bash", str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
+        [BASH, str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
         cwd=tmp_path, capture_output=True, text=True,
     )
     # `check=True` here raised a CalledProcessError carrying the exit code and

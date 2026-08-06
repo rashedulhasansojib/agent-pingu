@@ -13,6 +13,7 @@ that. A PreToolUse hook makes it a fact instead.
 """
 
 import json
+import os
 import subprocess
 import sys
 
@@ -27,10 +28,22 @@ WRITE = {"hook_event_name": "PreToolUse", "tool_name": "Write",
 
 def guard(repo, payload):
     """Run the guard exactly as the hook does: JSON on stdin, exit code out."""
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)}
+    if os.name == "nt":
+        # The point of building `env` from scratch is that a real
+        # ~/.claude/settings.json cannot leak into the assertion. `HOME` does not
+        # achieve that on Windows — `ntpath.expanduser` reads USERPROFILE — so
+        # without this the isolation silently stopped isolating, and `Path.home()`
+        # raised instead. Keep SYSTEMROOT: Python will not start without it.
+        env["USERPROFILE"] = str(repo)
+        env["PATH"] = os.environ.get("PATH", "")
+        for passthrough in ("SYSTEMROOT", "SystemRoot", "TEMP", "TMP"):
+            if passthrough in os.environ:
+                env[passthrough] = os.environ[passthrough]
     result = subprocess.run(
         [sys.executable, str(PLUGIN_ROOT / "scripts" / "pingu.py"), "guard"],
         input=json.dumps(payload), capture_output=True, text=True, cwd=repo,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)},
+        env=env,
     )
     return result
 

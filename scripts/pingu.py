@@ -150,14 +150,21 @@ def settings_files(scope="all"):
     repo is the less trusted source rather than the more specific one.
     """
     root = repo_root()
-    personal = Path.home() / ".claude" / "settings.json"
+    try:
+        personal = (Path.home() / ".claude" / "settings.json",)
+    except RuntimeError:
+        # `Path.home()` raises when no home can be resolved. `plugin_option`
+        # promises never to raise, and it calls this outside the try that makes
+        # that true — so the promise held only on machines with a home to find.
+        # The repo-scoped files below can still answer, and dropping the personal
+        # one loses a setting rather than the session.
+        personal = ()
     if scope == "user":
-        return (personal,)
+        return personal
     return (
         root / ".claude" / "settings.local.json",
         root / ".claude" / "settings.json",
-        personal,
-    )
+    ) + personal
 
 
 def plugin_option(key, default=None, scope="all"):
