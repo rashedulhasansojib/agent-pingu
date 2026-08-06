@@ -52,9 +52,18 @@ Restart Claude Code, then say **"set up the vault"**. The loop reads your repo a
 Needs Python 3, git, and `gh` for Issue mirroring. Obsidian needs Dataview for the board.
 
 **Platforms.** The Python tooling has no dependencies and runs wherever Python 3
-does. `bin/` and `vault_init.sh` are bash, so Windows needs Git Bash or WSL.
-Verified on Linux by CI (3.9 and 3.13) and on macOS in development; Windows is
-untested rather than known-good, and this says so instead of implying otherwise.
+does. CI proves that on Linux (3.9 and 3.13), macOS, and Windows — the suite is
+green on all four cells.
+
+`bin/` and `vault_init.sh` are bash, so Windows needs **Git Bash specifically**,
+not WSL. Bare `bash` on Windows resolves to `C:\Windows\System32\bash.exe`, the
+WSL launcher, which shadows Git Bash on PATH and fails outright if no
+distribution is installed.
+
+Two things Windows genuinely does not get, both stated rather than implied: the
+`bin/` wrappers are exercised only on POSIX, and the `O_NOFOLLOW` hardening on
+the one file this tooling writes at a steerable path is POSIX-only — a platform
+without the flag keeps a working allocator and loses that protection.
 
 ## Lanes
 
