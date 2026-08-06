@@ -139,6 +139,24 @@ AUTONOMY_LEVELS = {
 DEFAULT_AUTONOMY = "full-loop"
 
 
+def home_resolves():
+    """Whether `Path.home()` can answer at all.
+
+    Asked directly rather than tracked as a flag set by `settings_files`, so
+    there is no shared state to get stale and nothing to reset between calls.
+    Home either resolves for this process or it does not.
+
+    Exists because the degradation it reports is otherwise invisible: with no
+    home, the personal settings file is dropped, and everything downstream
+    behaves as though the user had declared nothing at all.
+    """
+    try:
+        Path.home()
+    except RuntimeError:
+        return False
+    return True
+
+
 def settings_files(scope="all"):
     """Where a plugin option can be declared, most specific first.
 
@@ -459,6 +477,23 @@ def cmd_status(vault, quiet=False):
         print(f"[pingu] autonomy setting {unrecognised!r} is not recognised — "
               f"expected one of: {', '.join(AUTONOMY_LEVELS)}")
     print(f"[pingu] autonomy: {level} — {AUTONOMY_LEVELS[level]}")
+
+    # Rare, and silent until now, which is the problem: with no home the personal
+    # settings file is simply dropped, so every option falls back and behaves
+    # exactly as though nothing had been declared. Three consequences the user
+    # would otherwise have no way to notice — a personal `vault_dir` ignored (so
+    # the setup guard inspects a directory that does not exist and allows
+    # everything), a personal `gh_repo` ignored, and ADR-0004's autonomy floor
+    # unable to fire at all.
+    #
+    # Said here rather than raised, because `plugin_option` promises never to
+    # raise and this runs inside the SessionStart hook. Degrade, but say so —
+    # the same trade as the unrecognised-autonomy line above.
+    if not home_resolves():
+        print("[pingu] no home directory resolves, so personal settings in "
+              "~/.claude/settings.json are being ignored entirely")
+        print("[pingu] repo settings still apply; a personal vault_dir, gh_repo "
+              "or autonomy floor does not")
 
     if todo:
         names = ", ".join(sorted(n["path"].name for n in todo))

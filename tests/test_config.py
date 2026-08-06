@@ -242,6 +242,35 @@ def test_status_warns_about_an_unrecognised_level(home, project, run_pingu, caps
     assert "autonomy: full-loop" in out
 
 
+def test_status_says_so_when_no_home_resolves(project, run_pingu, monkeypatch, capsys):
+    """The degradation was silent, which is the part worth fixing.
+
+    `settings_files()` drops the personal settings file when `Path.home()`
+    raises. Everything downstream then behaves as though the user had simply
+    declared nothing: ADR-0004's autonomy floor cannot fire, a personal
+    `vault_dir` is ignored so the setup guard inspects a directory that does not
+    exist and allows every edit, and nothing anywhere says a word.
+
+    Silence was the right call inside `plugin_option`, which promises never to
+    raise. It is the wrong call at session start, which is the one place the
+    model and the user both read. Same shape as the unrecognised-autonomy
+    warning two tests above: degrade, but say so.
+    """
+    no_home(monkeypatch)
+    run_pingu("status")
+    out = capsys.readouterr().out
+
+    assert "home" in out.lower(), "the degradation is still silent"
+    assert "personal" in out.lower(), "does not say what is being ignored"
+
+
+def test_status_stays_quiet_when_home_resolves(home, project, run_pingu, capsys):
+    """The other half, and the one that makes the warning worth having. A notice
+    printed every session is one nobody reads by the third day."""
+    run_pingu("status")
+    assert "no home" not in capsys.readouterr().out.lower()
+
+
 def test_status_survives_a_broken_settings_file(home, project, run_pingu, capsys):
     path = home / ".claude" / "settings.json"
     path.parent.mkdir(parents=True)
