@@ -498,6 +498,58 @@ def test_the_layout_block_lists_every_directory_that_ships():
     assert not missing, f"README's layout block never lists: {', '.join(missing)}"
 
 
+def ci_matrix():
+    """The `include:` cells of the pytest job, read out of the workflow."""
+    text = (PLUGIN_ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+    block = re.search(r"^        include:$(.*?)^    steps:", text, re.MULTILINE | re.DOTALL)
+    assert block, "the pytest job no longer declares an include: matrix"
+    cells = re.findall(r"- os:\s*(\S+)\s*\n\s*python:\s*\"([^\"]+)\"", block.group(1))
+    assert cells, "no matrix cells parsed — the shape of test.yml changed"
+    return cells
+
+
+# README calls the platforms by the names people use, not the runner labels.
+RUNNER_PROSE = {"ubuntu": "Linux", "macos": "macOS", "windows": "Windows"}
+COUNT_WORDS = {2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
+
+
+def test_the_readme_platform_claim_matches_the_matrix():
+    """README asserts what CI proves. Nothing tied the two together.
+
+    The paragraph was rewritten on 2026-08-06 the moment the matrix widened, and
+    correctly — but a later edit dropping `windows-latest` would leave README
+    claiming Windows is proven, false to a reader and to nothing else. A reviewer
+    flagged it as the one unpinned doc/code pair on that change.
+
+    Enforceable here, unlike the vault's own notes, because both files ship.
+    """
+    cells = ci_matrix()
+    text = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
+    para = re.search(r"\*\*Platforms\.\*\*(.*?)\n\n", text, re.DOTALL)
+    assert para, "README no longer has a '**Platforms.**' paragraph"
+    claim = para.group(1)
+
+    for runner, prose in RUNNER_PROSE.items():
+        if any(os_.startswith(runner) for os_, _ in cells):
+            assert prose in claim, (
+                f"CI runs on {runner} but README's platform claim never says {prose}")
+        else:
+            assert prose not in claim, (
+                f"README's platform claim says {prose}, which CI does not run")
+
+    # The cell count, because dropping one is the silent edit. Spelled, since
+    # that is how the paragraph reads.
+    word = COUNT_WORDS.get(len(cells))
+    assert word, f"{len(cells)} cells — extend COUNT_WORDS"
+    assert f"{word} cells" in claim, (
+        f"CI has {len(cells)} cells; README's platform claim does not say '{word} cells'")
+
+    # Every Python version the matrix names must appear too, so dropping 3.9
+    # cannot leave the README promising the bottom of the supported range.
+    for version in {v for _, v in cells}:
+        assert version in claim, f"CI runs Python {version}; README's claim omits it"
+
+
 ASSETS = PLUGIN_ROOT / "assets"
 
 
