@@ -223,9 +223,19 @@ def test_reservations_work_without_o_nofollow(vault, monkeypatch):
     assert (vault / ".gitignore").is_file()
 
 
+@NEEDS_O_NOFOLLOW
 def test_the_symlink_guard_is_still_applied_where_it_exists(vault, tmp_path):
     """The fallback must not quietly disable the protection on platforms that
-    do support it."""
+    do support it.
+
+    "Where it exists" is the whole point of this test and it had no skip, so on
+    Windows it asserted the opposite of what it is named for. The pair matters:
+    its sibling above proves the allocator survives without the flag, and this
+    one proves that survival was not bought by dropping the protection where the
+    flag is present. Skipping by capability keeps both halves honest — the
+    Windows runner genuinely does create the symlink, so this is a real absence
+    of protection, not an untestable one.
+    """
     target = tmp_path / "victim.txt"
     target.write_text("SECRET=hunter2\n", encoding="utf-8")
     (vault / ".gitignore").symlink_to(target)
