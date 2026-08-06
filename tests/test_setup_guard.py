@@ -13,14 +13,13 @@ that. A PreToolUse hook makes it a fact instead.
 """
 
 import json
-import os
 import subprocess
 import sys
 
 import pytest
 
 import pingu
-from conftest import PLUGIN_ROOT
+from conftest import PLUGIN_ROOT, isolated_env
 
 WRITE = {"hook_event_name": "PreToolUse", "tool_name": "Write",
          "tool_input": {"file_path": "search/api.py", "content": "x"}}
@@ -28,22 +27,10 @@ WRITE = {"hook_event_name": "PreToolUse", "tool_name": "Write",
 
 def guard(repo, payload):
     """Run the guard exactly as the hook does: JSON on stdin, exit code out."""
-    env = {"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)}
-    if os.name == "nt":
-        # The point of building `env` from scratch is that a real
-        # ~/.claude/settings.json cannot leak into the assertion. `HOME` does not
-        # achieve that on Windows — `ntpath.expanduser` reads USERPROFILE — so
-        # without this the isolation silently stopped isolating, and `Path.home()`
-        # raised instead. Keep SYSTEMROOT: Python will not start without it.
-        env["USERPROFILE"] = str(repo)
-        env["PATH"] = os.environ.get("PATH", "")
-        for passthrough in ("SYSTEMROOT", "SystemRoot", "TEMP", "TMP"):
-            if passthrough in os.environ:
-                env[passthrough] = os.environ[passthrough]
     result = subprocess.run(
         [sys.executable, str(PLUGIN_ROOT / "scripts" / "pingu.py"), "guard"],
         input=json.dumps(payload), capture_output=True, text=True, cwd=repo,
-        env=env,
+        env=isolated_env(repo),
     )
     return result
 
@@ -112,7 +99,7 @@ def test_declining_setup_unblocks_writing(repo, vault):
     subprocess.run(
         [sys.executable, str(PLUGIN_ROOT / "scripts" / "pingu.py"), "setup-decline"],
         cwd=repo, capture_output=True, text=True, check=True,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)},
+        env=isolated_env(repo),
     )
     assert guard(repo, WRITE).returncode == 0
 
@@ -121,7 +108,7 @@ def test_the_decision_is_recorded_where_the_team_can_see_it(repo, vault):
     subprocess.run(
         [sys.executable, str(PLUGIN_ROOT / "scripts" / "pingu.py"), "setup-decline"],
         cwd=repo, capture_output=True, text=True, check=True,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)},
+        env=isolated_env(repo),
     )
     marker = vault / pingu.SETUP_DECLINED
     assert marker.is_file(), "declining left no trace"
@@ -137,7 +124,7 @@ def test_a_malformed_payload_fails_open(repo):
     result = subprocess.run(
         [sys.executable, str(PLUGIN_ROOT / "scripts" / "pingu.py"), "guard"],
         input="not json at all", capture_output=True, text=True, cwd=repo,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)},
+        env=isolated_env(repo),
     )
     assert result.returncode == 0
 
@@ -146,7 +133,7 @@ def test_no_payload_at_all_fails_open(repo):
     result = subprocess.run(
         [sys.executable, str(PLUGIN_ROOT / "scripts" / "pingu.py"), "guard"],
         input="", capture_output=True, text=True, cwd=repo,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)},
+        env=isolated_env(repo),
     )
     assert result.returncode == 0
 
