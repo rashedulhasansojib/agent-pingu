@@ -15,7 +15,7 @@ import subprocess
 import sys
 
 import pingu
-from conftest import PLUGIN_ROOT
+from conftest import PLUGIN_ROOT, isolated_env
 
 # The sqa reviewer reintroduced the original max+1 bug and ran the concurrency
 # tests fifteen times: all three passed on 3 of 15 runs. Eight processes on a
@@ -30,7 +30,7 @@ def spawn(repo, *argv):
     return subprocess.Popen(
         [sys.executable, str(PLUGIN_ROOT / "scripts" / "pingu.py"), *argv],
         cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)},
+        env=isolated_env(repo),
     )
 
 

@@ -158,6 +158,18 @@ def settings_files(scope="all"):
         # that true — so the promise held only on machines with a home to find.
         # The repo-scoped files below can still answer, and dropping the personal
         # one loses a setting rather than the session.
+        #
+        # Bigger than it looks: `main()` resolves `vault_path()` for *every*
+        # command, `guard` included, so before this the PreToolUse hook died with
+        # a traceback and exit 1 on such a machine — which the hook protocol reads
+        # as a non-blocking error, so the edit proceeded. Fail-open by crash.
+        #
+        # Two consequences to know before touching this. ADR-0004's autonomy floor
+        # cannot fire while `personal` is empty, which that ADR now documents. And
+        # several tests in `test_setup_guard.py`, `test_ids.py` and
+        # `test_frontmatter_yaml.py` build a subprocess env by hand; if anyone
+        # revisits the fail-closed trade ADR-0004 rejected, those go red for a
+        # reason that looks nothing like the change that broke them.
         personal = ()
     if scope == "user":
         return personal
