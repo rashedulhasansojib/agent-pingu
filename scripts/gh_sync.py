@@ -87,8 +87,6 @@ def write_field(path, key, value):
     # Only ever called with gh_issue today, which is numeric — but nothing stops
     # the next caller passing prose, and an unquoted free-text value is exactly
     # the unparseable-note bug the quoting on the `pingu new` path removed.
-    # Numbers, booleans and null stay bare so `gh_issue: 42` is still a number
-    # to Dataview rather than a string.
     # Integers stay bare so `gh_issue: 42` is still a number to Dataview.
     # Everything else is quoted, including the strings "null" and "true": no
     # caller needs a literal YAML null, and exempting those words recreates
