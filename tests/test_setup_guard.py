@@ -140,14 +140,40 @@ def test_no_payload_at_all_fails_open(repo):
 
 # ------------------------------------------------------------------- it is wired
 
-def test_the_hook_is_declared():
+def guard_entry():
+    """The PreToolUse entry that runs the guard, or None."""
     hooks = json.loads((PLUGIN_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-    entries = hooks["hooks"].get("PreToolUse", [])
-    commands = [h["command"] for entry in entries for h in entry["hooks"]]
-    assert any("guard" in c for c in commands), "hooks.json does not run the setup guard"
-    matchers = [entry.get("matcher", "") for entry in entries]
-    assert any("Write" in m and "Edit" in m for m in matchers), (
-        "the guard is not matched against the editing tools")
+    for entry in hooks["hooks"].get("PreToolUse", []):
+        if any("guard" in h["command"] for h in entry["hooks"]):
+            return entry
+    return None
+
+
+def test_the_hook_is_declared():
+    assert guard_entry() is not None, "hooks.json does not run the setup guard"
+
+
+def test_the_matcher_lists_exactly_the_tools_the_guard_acts_on():
+    """The sixth coupled pair: `EDITING_TOOLS` and the PreToolUse matcher.
+
+    Two files have to agree and nothing held them together. The matcher decides
+    which tools Claude Code even *invokes* the hook for; `EDITING_TOOLS` decides
+    which of those the guard acts on. Add a tool to one and forget the other and
+    the guard silently stops covering it — no error, in the direction that fails
+    open.
+
+    Set equality, deliberately. The assertion this replaces was
+    `"Write" in m and "Edit" in m`, which reads like it checks the list and does
+    not: `"Edit" in "MultiEdit"` is true, so a matcher naming only `MultiEdit`
+    satisfied it, and neither `MultiEdit` nor `NotebookEdit` was ever checked at
+    all.
+    """
+    entry = guard_entry()
+    assert entry is not None, "hooks.json does not run the setup guard"
+    matched = set(entry.get("matcher", "").split("|"))
+    assert matched == set(pingu.EDITING_TOOLS), (
+        f"hooks.json matches {sorted(matched)} but pingu.EDITING_TOOLS is "
+        f"{sorted(pingu.EDITING_TOOLS)} — the guard covers only the intersection")
 
 
 def test_status_stops_nagging_once_setup_is_declined(repo, vault, run_pingu, capsys):

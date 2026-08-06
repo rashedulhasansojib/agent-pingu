@@ -4,20 +4,45 @@
 #   ./vault_init.sh              # creates docs/vault/
 #   VAULT_DIR=docs/knowledge ./vault_init.sh
 #
+# VAULT_DIR only tells *this run* where to scaffold. It is a shell variable, so
+# nothing remembers it: `pingu` reads `vault_dir` from the settings files, and
+# without a matching entry there it will keep looking in docs/vault. This script
+# says so rather than leaving you to find out.
+#
 # Safe to re-run: it never overwrites a file that already exists.
 
 set -euo pipefail
 
 REPO="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+PINGU="$(dirname "$0")/pingu.py"
 
-# An explicit VAULT_DIR wins; otherwise ask pingu, which is the one place that
-# knows how a plugin option is actually resolved. Resolving it here as well is
-# how the scaffolder and the tooling end up pointed at different directories.
+# Always ask pingu, which is the one place that knows how a plugin option is
+# actually resolved. An explicit VAULT_DIR is *handed to* it rather than expanded
+# here — the previous `VAULT="$REPO/$VAULT_DIR"` branch was a second resolver in
+# the very file whose comment forbids one, and it showed: `pingu.py` never read
+# `VAULT_DIR`, so the documented usage on line 5 scaffolded a vault the tooling
+# then could not find. That failure presents as an empty vault, not an error.
+#
+# Routing it through `vault_path()` also picks up the containment check, so
+# `VAULT_DIR=../../etc` is now refused instead of scaffolding outside the repo.
+CONFIGURED="$(python3 "$PINGU" vault-path 2>/dev/null || true)"
 if [ -n "${VAULT_DIR:-}" ]; then
-  VAULT="$REPO/$VAULT_DIR"
+  # stderr deliberately *not* swallowed here, unlike the `CONFIGURED` probe
+  # above. That is where `vault_path()` says it is ignoring a `vault_dir` that
+  # resolves outside the repo — and refusing an explicit request while printing
+  # nothing is the same silent degradation this change exists to remove.
+  VAULT="$(CLAUDE_PLUGIN_OPTION_VAULT_DIR="$VAULT_DIR" python3 "$PINGU" vault-path || true)"
+  # Asymmetric with the branch below, on purpose. With no VAULT_DIR the default
+  # is documented and almost certainly right, so degrading to it is fine. Here
+  # the caller asked for somewhere specific, and scaffolding somewhere else
+  # silently is the failure this whole change is about.
+  if [ -z "$VAULT" ]; then
+    echo "cannot resolve VAULT_DIR=$VAULT_DIR: could not run $PINGU" >&2
+    echo "(needs python3 on PATH; refusing to guess where the vault goes)" >&2
+    exit 1
+  fi
 else
-  VAULT="$(python3 "$(dirname "$0")/pingu.py" vault-path 2>/dev/null)" \
-    || VAULT="$REPO/docs/vault"
+  VAULT="$CONFIGURED"
   [ -n "$VAULT" ] || VAULT="$REPO/docs/vault"
 fi
 NAME="$(basename "$REPO")"
@@ -173,6 +198,21 @@ SORT updated DESC
 BRD
 
 echo "vault ready at $VAULT"
+
+# The scaffolder and the tooling now resolve through one function, but VAULT_DIR
+# is still a shell variable that dies with this process — so they can agree today
+# and disagree in the next session. Same trade as the warnings `pingu status`
+# already prints: degrade, but say so.
+if [ -n "$CONFIGURED" ] && [ "$VAULT" != "$CONFIGURED" ]; then
+  echo
+  echo "NOTE: pingu resolves the vault to $CONFIGURED, not the directory just"
+  echo "scaffolded. VAULT_DIR applies to this run only. To make it stick, set"
+  # `:-` because `set -u` is on and this block must not be the thing that
+  # crashes the scaffolder if a later edit lets it reach here unset.
+  echo "  pluginConfigs.agent-pingu.options.vault_dir = \"${VAULT_DIR:-}\""
+  echo "in .claude/settings.json — otherwise the loop will not find these notes."
+fi
+
 echo
 echo "The seeded notes are still templates. Start Claude Code here and say"
 echo "\"set up the vault\" — it will read this repo and draft them for you."

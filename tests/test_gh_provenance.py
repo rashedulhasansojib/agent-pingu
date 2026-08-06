@@ -11,8 +11,11 @@ The guard mirrors `push`'s: refuse by default, allow with an explicit flag.
 """
 
 import json
+import subprocess
 
 import pytest
+
+from conftest import set_home
 
 import gh_sync
 
@@ -53,6 +56,43 @@ def test_the_remote_is_read_in_every_url_form(repo, monkeypatch, url, expected):
 def test_no_remote_reads_as_unknown(repo, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
     assert gh_sync.git_remote_repo() is None
+
+
+def test_the_remote_is_read_from_the_repo_not_from_above_the_vault(tmp_path, monkeypatch):
+    """The remote must come from `repo_root()`, never from walking up the vault.
+
+    `git_remote_repo` used to run in `vault_path().parent.parent`, which is the
+    repo root only while `vault_dir` is exactly two segments deep. `vault_dir:
+    "vault"` is one, and two levels up from it is the *parent of the checkout* —
+    so with a repo nested inside another repo, the provenance guard compared
+    `gh_repo` against a repository the user never named.
+
+    Reproduced before it was fixed, which is why this builds the nesting rather
+    than asserting on a mock: the trap is entirely in the path arithmetic, and a
+    fake `git` would have agreed with the bug.
+    """
+    outer, inner = tmp_path / "outer", tmp_path / "outer" / "checkout"
+    inner.mkdir(parents=True)
+    for path, url in ((outer, "https://github.com/wrong/outer.git"),
+                      (inner, "https://github.com/you/yours.git")):
+        subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+        subprocess.run(["git", "remote", "add", "origin", url], cwd=path, check=True)
+
+    settings = inner / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text(json.dumps(
+        {"pluginConfigs": {"agent-pingu": {"options": {"vault_dir": "vault"}}}}),
+        encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(inner))
+    monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_VAULT_DIR", raising=False)
+    set_home(monkeypatch, tmp_path / "nohome")
+
+    # The arithmetic that was wrong, pinned so the reason this test exists stays
+    # legible: two levels up from this vault is genuinely not the checkout.
+    assert gh_sync.vault_path() == inner / "vault"
+    assert gh_sync.vault_path().parent.parent == outer
+
+    assert gh_sync.git_remote_repo() == "you/yours"
 
 
 # --------------------------------------------------------------- the guard
