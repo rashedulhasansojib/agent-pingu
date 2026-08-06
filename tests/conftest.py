@@ -39,6 +39,35 @@ def _bash():
 
 BASH = _bash()
 
+# `os.O_NOFOLLOW` is POSIX-only. ADR-0004 rule 4 is explicit that a platform
+# without it "loses this protection and keeps a working allocator", so a test
+# asserting the protection holds is asserting something the decision does not
+# claim. Skip rather than weaken the assertion — the point of the rule is that
+# the degradation is known, not that it is invisible.
+NEEDS_O_NOFOLLOW = pytest.mark.skipif(
+    not hasattr(os, "O_NOFOLLOW"),
+    reason="ADR-0004 rule 4 is best-effort: no O_NOFOLLOW on this platform",
+)
+
+# `bin/` is bash. README tells Windows users to bring Git Bash or WSL, so the
+# wrappers are out of scope for a bare Windows runner rather than broken on it.
+POSIX_ONLY = pytest.mark.skipif(
+    os.name == "nt", reason="bin/ wrappers are bash; see README on Windows"
+)
+
+
+def set_home(monkeypatch, path):
+    """Point home resolution at `path`, on every platform.
+
+    `HOME` alone does not do this on Windows: `ntpath.expanduser` reads
+    USERPROFILE, so a fixture setting only HOME silently read the developer's
+    real `~/.claude/settings.json` instead of the empty one it had just built.
+    Every test that thought it was isolated was not.
+    """
+    monkeypatch.setenv("HOME", str(path))
+    if os.name == "nt":
+        monkeypatch.setenv("USERPROFILE", str(path))
+
 
 def write_note(vault, relpath, **fields):
     """Write a note with the given frontmatter. Body is a stub."""
