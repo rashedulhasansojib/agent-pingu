@@ -95,6 +95,20 @@ def test_unreadable_settings_degrade_to_the_default(home, project):
     assert pingu.plugin_option("autonomy", "full-loop") == "full-loop"
 
 
+def no_home(monkeypatch):
+    """Make `Path.home()` raise, the way a machine with no resolvable home does.
+
+    One helper rather than two idioms. The second copy of this was written as
+    `lambda: (_ for _ in ()).throw(RuntimeError(...))` — a generator-throw trick
+    to get around lambda's ban on `raise` — which bought nothing the plain
+    function above it had not already bought, and read like a puzzle.
+    """
+    def raise_it():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(pingu.Path, "home", staticmethod(raise_it))
+
+
 def test_an_undeterminable_home_degrades_to_the_repo_settings(project, monkeypatch):
     """`plugin_option` says it never raises, and `settings_files` is called
     outside the try that makes that true. `Path.home()` raises RuntimeError when
@@ -106,10 +120,15 @@ def test_an_undeterminable_home_degrades_to_the_repo_settings(project, monkeypat
     and the two repo-scoped settings files that could have answered were never
     reached.
     """
-    def no_home():
-        raise RuntimeError("Could not determine home directory.")
-
-    monkeypatch.setattr(pingu.Path, "home", staticmethod(no_home))
+    no_home(monkeypatch)
+    # Not inherited from the `home` fixture, because that fixture's whole job is
+    # to make `Path.home()` resolve — the opposite of what this test needs. So
+    # the env clearing it does has to be repeated by hand. Omitting it made this
+    # test fail under an ambient CLAUDE_PLUGIN_OPTION_AUTONOMY: `plugin_option`
+    # reads the env var before any file. Exactly the flake the `home` fixture's
+    # own docstring records, reintroduced three lines from the fix for it, and
+    # caught by two reviewers rather than by the suite.
+    monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_AUTONOMY", raising=False)
 
     local = project / ".claude" / "settings.local.json"
     local.parent.mkdir(parents=True, exist_ok=True)
@@ -138,8 +157,7 @@ def test_the_autonomy_floor_is_absent_when_no_home_resolves(project, monkeypatch
     opposite instinct. The trade is written into ADR-0004's Consequences rather
     than left for someone to rediscover from this assertion.
     """
-    monkeypatch.setattr(pingu.Path, "home", staticmethod(
-        lambda: (_ for _ in ()).throw(RuntimeError("Could not determine home directory."))))
+    no_home(monkeypatch)
     write_settings(project / ".claude" / "settings.json", {"autonomy": "full-loop"})
     monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_AUTONOMY", raising=False)
 

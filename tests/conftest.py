@@ -56,6 +56,38 @@ POSIX_ONLY = pytest.mark.skipif(
 )
 
 
+def isolated_env(repo):
+    """A from-scratch environment for a subprocess under test.
+
+    Built from scratch rather than copied so no ambient `CLAUDE_PLUGIN_OPTION_*`
+    can leak into an assertion — that leak is recorded in `test_config.py`'s
+    `home` fixture as having already broken one test once.
+
+    `HOME` alone does not redirect home on Windows (`ntpath.expanduser` reads
+    `USERPROFILE`), so a POSIX-only literal here means `Path.home()` raises in
+    the child and the test passes only because `settings_files()` swallows that.
+    Two reviewers found this: it was six copies of one dict, and the Windows fix
+    was applied inline to exactly one of them. One helper, so the next platform
+    costs one edit rather than six.
+
+    `PATH` is deliberately real on Windows — the minimal POSIX one is meaningless
+    there. Nothing in the guard reads `PATH`; the isolation that matters is the
+    absence of plugin-option variables, and that holds on both branches.
+    """
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(repo),
+           "CLAUDE_PROJECT_DIR": str(repo)}
+    if os.name == "nt":
+        env["USERPROFILE"] = str(repo)
+        env["PATH"] = os.environ.get("PATH", "")
+        # SYSTEMROOT is not universally required — four call sites omitted it and
+        # passed — but it is required often enough that omitting it is a coin
+        # flip nobody should have to debug.
+        for passthrough in ("SYSTEMROOT", "SystemRoot", "TEMP", "TMP"):
+            if passthrough in os.environ:
+                env[passthrough] = os.environ[passthrough]
+    return env
+
+
 def set_home(monkeypatch, path):
     """Point home resolution at `path`, on every platform.
 

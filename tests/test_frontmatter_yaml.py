@@ -22,7 +22,7 @@ import yaml
 
 import gh_sync
 import pingu
-from conftest import PLUGIN_ROOT
+from conftest import PLUGIN_ROOT, isolated_env
 
 # Titles that a person would plausibly type, each of which is a YAML indicator
 # somewhere. "Fix: login bug" is not an edge case; it is how people name tasks.
@@ -166,7 +166,7 @@ def test_a_note_written_through_the_cli_is_valid_yaml(repo, vault):
         [sys.executable, str(PLUGIN_ROOT / "scripts" / "pingu.py"),
          "new", "task", "Fix: the #1 thing"],
         cwd=repo, capture_output=True, text=True,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(repo), "CLAUDE_PROJECT_DIR": str(repo)},
+        env=isolated_env(repo),
     )
     assert result.returncode == 0, result.stderr
     path = Path(result.stdout.strip())
