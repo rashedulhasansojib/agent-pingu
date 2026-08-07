@@ -7,6 +7,8 @@ defect, which is the argument for the phase existing.
 """
 
 import json
+import pathlib
+import shutil
 import subprocess
 import sys
 
@@ -14,7 +16,7 @@ import pytest
 import yaml
 
 import pingu
-from conftest import NEEDS_O_NOFOLLOW, PLUGIN_ROOT, set_home
+from conftest import BASH, NEEDS_O_NOFOLLOW, PLUGIN_ROOT, set_home
 
 
 def note_at(capsys):
@@ -293,7 +295,7 @@ def test_an_empty_home_cannot_make_the_repo_its_own_personal_settings(repo, tmp_
     home = tmp_path.parent / (tmp_path.name + "-empty-home")
     home.mkdir(exist_ok=True)
 
-    assert _floor(repo, home, monkeypatch, home_value="") != "full-loop", (
+    assert _floor(repo, home, monkeypatch, home_value="") == "gated", (
         "a repo-committed HOME='' let the repo override the user's gated choice")
     for path in pingu.settings_files("user"):
         assert repo not in pathlib.Path(path).resolve().parents, (
@@ -308,7 +310,7 @@ def test_a_home_pointing_at_the_checkout_cannot_forge_the_personal_file(repo, tm
     home = tmp_path.parent / (tmp_path.name + "-checkout-home")
     home.mkdir(exist_ok=True)
 
-    assert _floor(repo, home, monkeypatch, home_value=repo) != "full-loop", (
+    assert _floor(repo, home, monkeypatch, home_value=repo) == "gated", (
         "a repo-committed HOME=<the checkout> let the repo forge the personal floor")
 
 
@@ -325,9 +327,23 @@ def test_a_missing_home_is_reported_rather_than_silently_dropping_the_floor(repo
     home.mkdir(exist_ok=True)
     missing = tmp_path.parent / (tmp_path.name + "-does-not-exist")
 
-    _floor(repo, home, monkeypatch, home_value=missing)
+    level = _floor(repo, home, monkeypatch, home_value=missing)
+
+    # The level, which this test used to discard. It must stay `full-loop`:
+    # ADR-0004 is explicit that a machine with no home *loses* the floor rather
+    # than being forced to the tightest setting, because that case fires for
+    # containers and CI. Asserting only "a problem was reported" passed whether
+    # this branch was classed as tampering or not, and classing it as tampering
+    # would silently gate every container in the world.
+    assert level == "full-loop", (
+        "a missing home was treated as tampering and forced gated; ADR-0004 says "
+        "this case degrades rather than tightens")
+
     _, problem = pingu.personal_settings_file()
     assert problem, "a home that does not exist was accepted silently"
+    assert not problem.tampering, (
+        "a missing home was classed as tampering, which forces gated on every "
+        "container and CI box")
 
     pingu.main(["pingu.py", "status"])
     out = capsys.readouterr().out
@@ -399,3 +415,159 @@ def test_the_interpreter_names_survive_a_hooks_file_that_cannot_be_read(tmp_path
     broken.write_text("{not json", encoding="utf-8")
 
     assert pingu.hook_interpreter_names(broken) == ()
+
+
+def test_vault_init_says_so_when_it_could_not_read_a_configured_vault_dir(tmp_path):
+    """T-0004's quietest bullet, and it was nearly shipped unmet.
+
+    `vault_init.sh` probed `pingu vault-path` with `2>/dev/null || true`, which
+    collapsed two different outcomes into one empty string: "pingu answered, and
+    nothing is configured" — where defaulting to `docs/vault` is correct — and
+    "pingu never ran", where defaulting is a guess. In the second case a
+    configured `vault_dir` goes unread and the vault is scaffolded somewhere the
+    tooling will not look. That presents as an empty vault, not as an error.
+
+    A spec reviewer caught this after the task had already been marked done.
+    """
+    import os
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+
+    shell_only = tmp_path / "shell-only"
+    shell_only.mkdir()
+    for tool in ("git", "date", "basename", "dirname", "mkdir", "cat", "sed"):
+        found = shutil.which(tool)
+        if found:
+            (shell_only / tool).symlink_to(found)
+
+    # The shell is resolved absolutely so it can still be spawned; the *child's*
+    # PATH stays doctored, which is what puts python out of reach. Resolving bash
+    # against the doctored PATH instead would fail to spawn at all, and the test
+    # would go red for a reason that has nothing to do with the interpreter.
+    result = subprocess.run(
+        [shutil.which(BASH) or BASH, str(PLUGIN_ROOT / "scripts" / "vault_init.sh")],
+        cwd=repo, capture_output=True, text=True,
+        env=dict(os.environ, PATH=str(shell_only)),
+    )
+
+    assert "needs python3 on PATH" in result.stderr, (
+        "vault_init.sh fell back to the default vault without saying it had "
+        f"never read the configured one\n--- stderr ---\n{result.stderr}")
+
+
+def test_a_case_varied_home_cannot_forge_the_personal_file(repo, tmp_path, monkeypatch):
+    """The third forgery vector, found by a reviewer rather than by the tests.
+
+    `os.path.realpath` resolves symlinks but does not canonicalise case, and this
+    ships on APFS and NTFS — both case-insensitive, both in the CI matrix. So
+    `HOME=/Repo/Path` and `HOME=/repo/path` name one directory on disk and two
+    different strings, and the string comparison guarding the boundary said "not
+    inside the repo" for a home that plainly was.
+
+    Skipped where the filesystem is genuinely case-sensitive, because there the
+    two paths really are different directories and there is nothing to catch.
+    """
+    swapped = pathlib.Path(str(repo).swapcase())
+    if str(swapped) == str(repo) or not swapped.is_dir():
+        pytest.skip("this filesystem is case-sensitive, so there is no case bypass")
+
+    assert _floor(repo, repo, monkeypatch, home_value=swapped) == "gated", (
+        "a case-varied HOME pointing at the checkout forged the personal floor")
+    _, problem = pingu.personal_settings_file()
+    assert problem is not None and problem.tampering, (
+        "a case-varied home inside the repo was not recognised as tampering")
+
+
+def test_the_interpreter_names_survive_a_hooks_file_that_is_not_an_object(tmp_path):
+    """Valid JSON, wrong shape. `data.get` on a list raises AttributeError out of
+    a function whose contract is to answer or return empty."""
+    odd = tmp_path / "hooks.json"
+    odd.write_text("[]", encoding="utf-8")
+
+    assert pingu.hook_interpreter_names(odd) == ()
+
+
+def test_the_option_env_var_cannot_forge_the_personal_floor(repo, tmp_path, monkeypatch):
+    """The total bypass that walked past everything else in this file.
+
+    `plugin_option` short-circuits on `CLAUDE_PLUGIN_OPTION_<KEY>` before it ever
+    opens a file. `autonomy()` reads the floor with `scope="user"`, so that
+    short-circuit made the floor read return the *attacker's* string: full-loop
+    compared against full-loop, floor never fires. And the environment is exactly
+    what a committed `.claude/settings.json` controls, via the `env` key that
+    T-0005 measured as reaching hook subprocesses.
+
+    So every control added for ADR-0004 rule 2 was bypassable with one line of
+    committed JSON, without entering any of the branches they guard. Found by the
+    security reviewer with a repro, after the rest of this work was finished.
+
+    The env var stays honoured for ordinary lookups — `vault_init.sh` passes one
+    deliberately — which is why the fix is scoped rather than a deletion, and why
+    the second half of this test matters as much as the first.
+    """
+    home = tmp_path.parent / (tmp_path.name + "-optenv-home")
+    (home / ".claude").mkdir(parents=True, exist_ok=True)
+    (home / ".claude" / "settings.json").write_text(json.dumps(
+        {"pluginConfigs": {"agent-pingu": {"options": {"autonomy": "gated"}}}}),
+        encoding="utf-8")
+    set_home(monkeypatch, home)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+    monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_AUTONOMY", "full-loop")
+
+    assert pingu.autonomy()[0] == "gated", (
+        "CLAUDE_PLUGIN_OPTION_AUTONOMY overrode the personal floor it is supposed "
+        "to be subordinate to")
+
+    # The other half: the short-circuit still works where it is not a bypass.
+    monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_VAULT_DIR", "docs/knowledge")
+    assert pingu.vault_path() == repo / "docs" / "knowledge", (
+        "the fix went too far and broke the deliberate vault_init.sh channel")
+
+
+@pytest.mark.parametrize("missing, expected", [
+    ("python", "on PATH"),
+    ("shell", "fail closed"),
+    # Exactly one shell present. `and` is deliberate — either shell is enough to
+    # run the hook, so this must NOT warn. Without this case the test cannot tell
+    # `and` from `or`: with both shells present or both absent the two operators
+    # agree, so a mutation to `or` sailed straight through the first two rows.
+    ("bash-only", None),
+    ("sh-only", None),
+])
+def test_the_two_hook_environment_warnings_fire_independently(monkeypatch, missing, expected):
+    """Each condition on its own, because the pair was only ever tested together.
+
+    `test_doctor_warns_when_no_hook_interpreter_resolves` patches `shutil.which`
+    to return None for everything, which cannot tell `and` from `or` in the shell
+    check, and cannot tell either warning from a version that emits both
+    whenever anything is missing. A machine with bash but no Python is a real
+    configuration — it is the one the whole ADR is about.
+    """
+    interpreters = set(pingu.hook_interpreter_names())
+    real = shutil.which
+
+    def fake(name, *args, **kwargs):
+        if missing == "python" and name in interpreters:
+            return None
+        if missing == "shell" and name in ("sh", "bash"):
+            return None
+        if missing == "bash-only" and name == "sh":
+            return None
+        if missing == "sh-only" and name == "bash":
+            return None
+        return real(name, *args, **kwargs) or "/usr/bin/" + name
+
+    monkeypatch.setattr(pingu.shutil, "which", fake)
+    warnings = pingu.hook_environment_warnings()
+
+    if expected is None:
+        assert warnings == [], (
+            f"one shell is missing but the other is present, which is a working "
+            f"machine — it must not warn: {warnings}")
+        return
+    assert any(expected in w for w in warnings), (
+        f"with only {missing} missing, expected a warning containing {expected!r}, "
+        f"got {warnings}")
+    assert len(warnings) == 1, (
+        f"only {missing} is missing, so exactly one warning is right: {warnings}")

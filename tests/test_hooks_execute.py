@@ -146,8 +146,21 @@ def test_the_guard_command_allows_an_edit_inside_the_vault(command, repo):
 
 NO_PYTHON_PATH = "/nonexistent-agent-pingu-empty-bin"
 
+# Skipped by *capability*, not by platform name — the same convention as
+# NEEDS_O_NOFOLLOW, and for the same reason. These two tests prove ADR-0005's
+# headline claim, and skipping them on `os.name == "nt"` made them invisible on
+# precisely the platform where that claim is least certain. `conftest.BASH`
+# resolves Git Bash by name on Windows, and every other test in this file already
+# runs through it there, so there is no platform limitation to hide behind: if a
+# POSIX shell is present the claim is testable, and if one is not then ADR-0005
+# says outright that the guarantee does not hold.
+NEEDS_POSIX_SHELL = pytest.mark.skipif(
+    shutil.which(BASH) is None,
+    reason="ADR-0005: the guard can only fail closed where a POSIX shell exists",
+)
 
-@pytest.mark.skipif(os.name == "nt", reason="needs a POSIX shell to be the shell")
+
+@NEEDS_POSIX_SHELL
 @pytest.mark.parametrize("command", guard_commands())
 def test_the_guard_fails_closed_when_no_interpreter_resolves(command, repo):
     """The finding this run exists for, and the one number that encodes it.
@@ -171,7 +184,7 @@ def test_the_guard_fails_closed_when_no_interpreter_resolves(command, repo):
         f"anything but 2 lets the edit through\n--- stderr ---\n{result.stderr}")
 
 
-@pytest.mark.skipif(os.name == "nt", reason="needs a POSIX shell to be the shell")
+@NEEDS_POSIX_SHELL
 @pytest.mark.parametrize("command", hook_commands("SessionStart"))
 def test_session_start_does_not_block_when_no_interpreter_resolves(command, repo):
     """The opposite trade from the guard, and deliberate — ADR-0005 rule 3.

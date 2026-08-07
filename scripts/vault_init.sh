@@ -25,7 +25,15 @@ PINGU="$(dirname "$0")/pingu.py"
 #
 # Routing it through `vault_path()` also picks up the containment check, so
 # `VAULT_DIR=../../etc` is now refused instead of scaffolding outside the repo.
-CONFIGURED="$(python3 "$PINGU" vault-path 2>/dev/null || true)"
+#
+# The `|| true` this used to carry collapsed two different outcomes into one
+# empty string: "pingu answered, and there is no configured vault_dir" and
+# "pingu never ran". The second is the one that matters — a configured
+# `vault_dir` then goes unread and the vault is scaffolded at the default, which
+# is a directory the tooling will not look in. Silent, and it presents as an
+# empty vault rather than as an error. Keep the fallback, lose the silence.
+PROBE_FAILED=""
+CONFIGURED="$(python3 "$PINGU" vault-path 2>/dev/null)" || PROBE_FAILED=1
 if [ -n "${VAULT_DIR:-}" ]; then
   # stderr deliberately *not* swallowed here, unlike the `CONFIGURED` probe
   # above. That is where `vault_path()` says it is ignoring a `vault_dir` that
@@ -43,7 +51,16 @@ if [ -n "${VAULT_DIR:-}" ]; then
   fi
 else
   VAULT="$CONFIGURED"
-  [ -n "$VAULT" ] || VAULT="$REPO/docs/vault"
+  if [ -z "$VAULT" ]; then
+    # Defaulting is right when pingu ran and said there is nothing configured.
+    # It is a guess when pingu never ran, so say which one this is.
+    if [ -n "$PROBE_FAILED" ]; then
+      echo "warning: could not run $PINGU (needs python3 on PATH)" >&2
+      echo "warning: any configured vault_dir has NOT been read; scaffolding at" >&2
+      echo "warning: the default docs/vault, which may not be where pingu looks" >&2
+    fi
+    VAULT="$REPO/docs/vault"
+  fi
 fi
 NAME="$(basename "$REPO")"
 TODAY="$(date +%F)"
