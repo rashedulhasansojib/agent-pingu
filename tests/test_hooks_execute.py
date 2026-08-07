@@ -22,15 +22,14 @@ point — the alternative is the confident green tick this repo exists to avoid.
 
 import json
 import os
-import shlex
+import re
 import shutil
 import subprocess
-import sys
-import warnings
 
 import pytest
 
-from conftest import PLUGIN_ROOT, isolated_env
+import pingu
+from conftest import BASH, PLUGIN_ROOT, isolated_env
 
 PLACEHOLDER = "${CLAUDE_PLUGIN_ROOT}"
 
@@ -41,46 +40,38 @@ def hook_commands(event):
     return [h["command"] for entry in hooks["hooks"].get(event, []) for h in entry["hooks"]]
 
 
-def argv_for(command):
-    """The declared command string as an argv this test can run.
+def hook_env(repo, path=None):
+    """`isolated_env`, but with a PATH that can actually find an interpreter.
 
-    Split *before* substituting, not after. `shlex.split` in POSIX mode eats
-    backslashes, so expanding the placeholder first would mangle every Windows
-    path into an unrecognisable one — and the failure would look like a bug in
-    the hook rather than in this helper.
-
-    The interpreter is resolved to an absolute path against the ambient PATH,
-    because the subprocess runs under `isolated_env`, whose PATH is deliberately
-    minimal. Resolving it here keeps the isolation without pretending the
-    interpreter is missing.
+    `isolated_env` pins PATH to `/usr/bin:/bin` for isolation. Since ADR-0005 the
+    hook commands *resolve* their interpreter off PATH, so that pin is no longer
+    incidental — it is the input under test. Callers that want the missing-
+    interpreter case pass their own `path`.
     """
-    tokens = [t.replace(PLACEHOLDER, str(PLUGIN_ROOT)) for t in shlex.split(command)]
-    resolved = shutil.which(tokens[0]) or shutil.which(tokens[0] + ".exe")
-    if resolved is None:
-        # Falling back keeps the question this test asks ("does the hook's script
-        # work?") separate from the one the test below asks ("does the declared
-        # interpreter name resolve here?"). Conflating them would let a missing
-        # `python3` masquerade as a broken guard.
-        #
-        # Said out loud, because a silent substitution is how every one of these
-        # tests passes on a platform where the hooks would not run at all. The
-        # xfail below records the fact; this makes it visible in the CI log of
-        # the job that actually did the substituting.
-        warnings.warn(
-            f"{tokens[0]!r} does not resolve here — running these hook commands "
-            f"with {sys.executable!r} instead. The scripts are being tested; the "
-            f"interpreter name in hooks.json is not. See T-0004.",
-            stacklevel=2,
-        )
-        tokens[0] = sys.executable
-    else:
-        tokens[0] = resolved
-    return tokens
+    env = isolated_env(repo)
+    env["PATH"] = os.environ.get("PATH", "") if path is None else path
+    return env
 
 
-def run_hook(command, repo, payload=None):
+def run_hook(command, repo, payload=None, path=None):
+    """Run a declared hook command the way Claude Code does: through a shell.
+
+    These commands are *shell form* — no `args` key — which per ADR-0005 is
+    deliberate, because only a shell can resolve an interpreter and still exit 2
+    when it cannot. So they must be executed by a shell here too. They used to be
+    `shlex.split` into an argv, which stopped being meaningful the moment the
+    command became a script rather than a bare invocation: argv[0] became
+    `PY=$(command`, every command "failed to resolve", and the helper silently
+    substituted `sys.executable` and tested nothing that was declared.
+    """
+    # Absolute, because the missing-interpreter cases hand this a PATH with
+    # nothing on it — including bash. Resolving the shell against that PATH would
+    # fail to spawn at all, and the test would "pass" or error for a reason that
+    # has nothing to do with the interpreter under test.
+    shell = shutil.which(BASH) or BASH
     return subprocess.run(
-        argv_for(command), cwd=repo, env=isolated_env(repo),
+        [shell, "-c", command.replace(PLACEHOLDER, str(PLUGIN_ROOT))],
+        cwd=repo, env=hook_env(repo, path),
         input=json.dumps(payload) if payload is not None else "",
         capture_output=True, text=True,
     )
@@ -153,6 +144,101 @@ def test_the_guard_command_allows_an_edit_inside_the_vault(command, repo):
 
 # ----------------------------------------------------- the interpreter, on record
 
+NO_PYTHON_PATH = "/nonexistent-agent-pingu-empty-bin"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="needs a POSIX shell to be the shell")
+@pytest.mark.parametrize("command", guard_commands())
+def test_the_guard_fails_closed_when_no_interpreter_resolves(command, repo):
+    """The finding this run exists for, and the one number that encodes it.
+
+    Measured before the fix: with no Python on PATH the old command exited 127,
+    the hook protocol read that as a non-blocking error, and **the edit went
+    through** — verified end to end against a real `claude -p` session, with a
+    hook that exits 2 as the control to prove the probe could detect a block.
+    So the setup gate silently granted permission on exactly the machines it was
+    written to protect.
+
+    `!= 0` would pass on 127 and assert nothing. It must be 2.
+    """
+    result = run_hook(command, repo, {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(repo / "src" / "feature.py")},
+    }, path=NO_PYTHON_PATH)
+
+    assert result.returncode == 2, (
+        f"with no interpreter on PATH the guard exited {result.returncode}, not 2 — "
+        f"anything but 2 lets the edit through\n--- stderr ---\n{result.stderr}")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="needs a POSIX shell to be the shell")
+@pytest.mark.parametrize("command", hook_commands("SessionStart"))
+def test_session_start_does_not_block_when_no_interpreter_resolves(command, repo):
+    """The opposite trade from the guard, and deliberate — ADR-0005 rule 3.
+
+    A session that cannot print its status line should say so, not refuse to
+    start. Non-zero so the failure is visible; never 2, which would block.
+    """
+    result = run_hook(command, repo, path=NO_PYTHON_PATH)
+
+    assert result.returncode != 0, "a missing interpreter should be reported, not silent"
+    assert result.returncode != 2, (
+        "SessionStart exited 2, which blocks. Only the guard may fail closed.")
+
+
+def test_both_hooks_resolve_the_interpreter_the_same_way():
+    """ADR-0005 rule 5: the visible hook is the canary for the invisible one.
+
+    SessionStart prints `[pingu]` lines a human sees. PreToolUse is silent when
+    it allows. Because both resolve the interpreter identically, a missing
+    `[pingu]` line at session start means the guard is not running either — the
+    only user-facing signal that the gate is down. It exists only while the two
+    stay identical, and nothing else would notice them diverging.
+    """
+    def resolver(command):
+        """The interpreter-choosing expression, i.e. what is inside `$( ... )`.
+
+        Not "everything before the first `;`" — the two commands carry different
+        diagnostic messages, and those contain semicolons, so that comparison
+        fails for a reason unrelated to what this test is about.
+        """
+        found = re.search(r"\$\((.*?)\)", command)
+        return found.group(1).strip() if found else command
+
+    resolvers = {resolver(c) for c in hook_commands("SessionStart") + guard_commands()}
+    assert len(resolvers) == 1, (
+        "the hooks no longer resolve the interpreter identically, so a present "
+        f"[pingu] line no longer implies a working guard:\n" + "\n".join(sorted(resolvers)))
+
+
+@pytest.mark.parametrize("command", guard_commands())
+def test_the_fallback_cannot_turn_a_block_into_an_allow(command):
+    """The trap T-0004 named, pinned so nobody rediscovers it by shipping it.
+
+    `guard` returns 2 to mean *blocked*. So a fallback chained onto the guard —
+    `... pingu.py guard || ... pingu.py guard` — would re-run it on every block
+    and let the second, successful run allow the edit. Every block becomes an
+    allow, and the suite stays green because the happy path is unchanged.
+
+    The resolver's `||` is therefore only ever allowed *inside* the command
+    substitution that picks an interpreter, which runs before `pingu.py` is
+    invoked at all.
+    """
+    before_exec, _, after_exec = command.partition("exec ")
+    assert "||" not in after_exec, (
+        "a `||` appears after the interpreter is resolved, so a blocked edit "
+        f"(exit 2) could be retried into an allow:\n{command}")
+    # The script itself must be invoked exactly once, and only after resolution.
+    # Matching on the word "guard" would not work: it appears in the diagnostic
+    # message too, which is prose rather than an invocation.
+    assert "pingu.py" not in before_exec, (
+        "pingu.py is invoked before the interpreter is resolved, so a block "
+        f"could be retried into an allow:\n{command}")
+    assert after_exec.count("pingu.py") == 1, (
+        f"pingu.py is invoked more than once, which is how a block becomes an "
+        f"allow:\n{command}")
+
+
 @pytest.mark.xfail(
     os.name == "nt", strict=False,
     reason="T-0004: whether `python3` resolves on Windows is open. Recorded, not asserted.",
@@ -173,9 +259,9 @@ def test_the_interpreter_the_hooks_name_resolves_on_this_platform():
     XFAIL in the summary. Nothing turns red either way, which is the point and
     also the cost — someone has to go and look at the Windows job.
     """
-    interpreters = {shlex.split(c)[0] for c in hook_commands("SessionStart") + hook_commands("PreToolUse")}
-    assert interpreters, "no hook commands to check"
-    for name in interpreters:
-        assert shutil.which(name), (
-            f"hooks.json runs {name!r}, which does not resolve on this platform — "
-            f"both hooks would fail silently")
+    names = pingu.hook_interpreter_names()
+    assert names, "no interpreter names could be read out of hooks.json"
+    assert any(shutil.which(n) for n in names), (
+        f"hooks.json tries {', '.join(names)}, and none resolves on this "
+        f"platform — SessionStart would report nothing and the guard would "
+        f"refuse every edit")

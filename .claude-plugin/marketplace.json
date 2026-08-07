@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "agent-pingu",
+  "owner": {
+    "name": "Rashedul Hasan"
+  },
+  "description": "The agent-pingu engineering loop.",
+  "plugins": [
+    {
+      "name": "agent-pingu",
+      "source": "./",
+      "description": "Vault-backed engineering loop for any development work: talk, research, ADR, plan, diagnose, execute, verify, retro. State lives in a project-local Obsidian vault; tasks mirror to GitHub Issues."
+    }
+  ]
+}

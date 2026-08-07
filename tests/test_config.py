@@ -32,9 +32,13 @@ def write_settings(path, options, plugin="agent-pingu@skills-dir"):
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):
-    """An empty HOME, so a real ~/.claude/settings.json cannot leak in."""
-    fake = tmp_path / "home"
-    fake.mkdir()
+    """An empty HOME, so a real ~/.claude/settings.json cannot leak in.
+
+    Outside `tmp_path`, because `tmp_path` *is* the repo in this suite and a home
+    inside the repo is now refused as an attempted forgery — see `fake_home_for`.
+    """
+    fake = tmp_path.parent / (tmp_path.name + "-home")
+    fake.mkdir(exist_ok=True)
     set_home(monkeypatch, fake)
     # Every option, not the two that happened to be under test: plugin_option
     # checks the env var first, so an ambient CLAUDE_PLUGIN_OPTION_GH_REPO made
