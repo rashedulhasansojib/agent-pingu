@@ -7,6 +7,7 @@ defect, which is the argument for the phase existing.
 """
 
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -295,11 +296,39 @@ def test_an_empty_home_cannot_make_the_repo_its_own_personal_settings(repo, tmp_
     home = tmp_path.parent / (tmp_path.name + "-empty-home")
     home.mkdir(exist_ok=True)
 
+    # `Path.home()` disagrees across the CI matrix for HOME="": 3.9 gives `.`,
+    # 3.13 gives `/`. So the *mechanism* is what gets pinned here, not one
+    # interpreter's shape — asserting a level alone passed on 3.9 and would have
+    # failed on 3.13, and the code was genuinely open there. Both are refused now,
+    # by two different branches, and this asserts the outcome common to both.
     assert _floor(repo, home, monkeypatch, home_value="") == "gated", (
         "a repo-committed HOME='' let the repo override the user's gated choice")
+    _, problem = pingu.personal_settings_file()
+    assert problem is not None and problem.tampering, (
+        f"HOME='' was not recognised as tampering; got {problem}")
     for path in pingu.settings_files("user"):
         assert repo not in pathlib.Path(path).resolve().parents, (
             f"the personal settings file resolved inside the repo: {path}")
+
+
+def test_a_home_at_the_filesystem_root_cannot_erase_the_floor(repo, tmp_path, monkeypatch):
+    """The 3.13 half of the HOME="" divergence, pinned directly so it is tested
+    on every interpreter rather than only on the one that happens to produce it.
+
+    On 3.13 `HOME=""` resolves to `/`, which is absolute, outside the repo, and a
+    real directory — so it slipped past all three earlier checks with
+    `problem is None`, and the floor was silently gone. Nobody's home is the
+    filesystem root, so this has no legitimate cause and is treated as tampering.
+    """
+    home = tmp_path.parent / (tmp_path.name + "-root-home")
+    home.mkdir(exist_ok=True)
+    root = pathlib.Path(os.path.abspath(os.sep))
+
+    assert _floor(repo, home, monkeypatch, home_value=root) == "gated", (
+        "a home at the filesystem root erased the personal floor")
+    _, problem = pingu.personal_settings_file()
+    assert problem is not None and problem.tampering, (
+        f"a home at the filesystem root was not recognised as tampering: {problem}")
 
 
 def test_a_home_pointing_at_the_checkout_cannot_forge_the_personal_file(repo, tmp_path, monkeypatch):
@@ -417,6 +446,8 @@ def test_the_interpreter_names_survive_a_hooks_file_that_cannot_be_read(tmp_path
     assert pingu.hook_interpreter_names(broken) == ()
 
 
+@pytest.mark.skipif(shutil.which(BASH) is None,
+                    reason="vault_init.sh is bash; skipped by capability, not by platform")
 def test_vault_init_says_so_when_it_could_not_read_a_configured_vault_dir(tmp_path):
     """T-0004's quietest bullet, and it was nearly shipped unmet.
 
