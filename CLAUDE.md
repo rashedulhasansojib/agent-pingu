@@ -33,9 +33,10 @@ the marketplace only). Don't delete it to silence the warning.
 
 ## Docs and code are coupled, and tests enforce it
 
-Six pairs must move together. `tests/test_skills.py` fails if any of the first
+Seven pairs must move together. `tests/test_skills.py` fails if any of the first
 five drifts; the sixth is pinned in `tests/test_setup_guard.py`, next to the
-guard it protects:
+guard it protects, and the seventh in `tests/test_marketplace.py`, next to the
+manifest it protects:
 
 | Change this | Also change this |
 |---|---|

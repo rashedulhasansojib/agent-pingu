@@ -170,7 +170,10 @@ def hook_interpreter_names(hooks_json=None):
     except (OSError, ValueError, UnicodeDecodeError):
         return ()
     names, seen = [], set()
-    events = data.get("hooks")
+    # `isinstance` rather than `data.get`: valid JSON that is not an object at
+    # the top level (`[]`) would raise AttributeError straight out of a function
+    # whose whole contract is to answer or return empty.
+    events = data.get("hooks") if isinstance(data, dict) else None
     if not isinstance(events, dict):
         return ()
     for groups in events.values():
@@ -191,6 +194,48 @@ def hook_interpreter(hooks_json=None):
         if found:
             return name, found
     return None, None
+
+
+def _is_inside(path, root):
+    """Whether `path` lies within `root`, on filesystems that lie about case.
+
+    Two comparisons, because neither alone is enough and this one guards a
+    security boundary:
+
+      - **String**, over `realpath`. Answers for a path that does not exist yet,
+        which the settings file often does not.
+      - **`os.path.samefile`**, walking `path`'s ancestors. `realpath` resolves
+        symlinks but does **not** canonicalise case, and this ships on APFS and
+        NTFS — both case-insensitive, both in the CI matrix. So a `HOME` differing
+        from the checkout only in case pointed at the very same directory and
+        compared unequal as a string, which slipped the whole forgery through on
+        the two commonest desktop platforms. `samefile` compares device and inode,
+        so it is immune to case and to symlinks alike.
+
+    Found by a reviewer, not by the tests — the other two forgery vectors were
+    mutation-tested and this third one sat between them.
+    """
+    try:
+        real_path = os.path.realpath(str(path))
+        real_root = os.path.realpath(str(root))
+    except (OSError, ValueError):
+        return False
+
+    try:
+        if os.path.commonpath((real_path, real_root)) == real_root:
+            return True
+    except (OSError, ValueError):
+        # Different drives on Windows raise rather than compare. Not inside, then.
+        pass
+
+    current = Path(real_path)
+    for ancestor in (current,) + tuple(current.parents):
+        try:
+            if os.path.samefile(str(ancestor), real_root):
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
 
 
 def personal_settings_file():
@@ -240,16 +285,7 @@ def personal_settings_file():
             tampering=True)
 
     candidate = home / ".claude" / "settings.json"
-    root = repo_root()
-    try:
-        inside_repo = os.path.commonpath(
-            (os.path.realpath(str(candidate)), os.path.realpath(str(root)))
-        ) == os.path.realpath(str(root))
-    except (OSError, ValueError):
-        # Different drives on Windows raise rather than compare. Not the repo,
-        # then, which is the answer this call needs.
-        inside_repo = False
-    if inside_repo:
+    if _is_inside(candidate, repo_root()):
         return None, SettingsProblem(
             f"the home directory resolves inside the repo ({str(home)!r})",
             tampering=True)
@@ -338,9 +374,22 @@ def plugin_option(key, default=None, scope="all"):
     Never raises. This runs inside the SessionStart hook, where an exception over
     a stray comma in a file this plugin does not own would cost the whole session.
     """
-    env = os.environ.get("CLAUDE_PLUGIN_OPTION_" + key.upper())
-    if env:
-        return env
+    # The env var is honoured for ordinary lookups — `vault_init.sh` passes
+    # `CLAUDE_PLUGIN_OPTION_VAULT_DIR` deliberately — but **never** for the
+    # personal scope. That scope exists precisely because the repo is the *less*
+    # trusted source, and the environment is something a repo-committed
+    # `.claude/settings.json` sets via its `env` key (measured, see
+    # `personal_settings_file`).
+    #
+    # Without this, `{"env": {"CLAUDE_PLUGIN_OPTION_AUTONOMY": "full-loop"}}` made
+    # `autonomy()`'s floor read return the attacker's own string, so the floor
+    # compared full-loop against full-loop and never fired. A total bypass of
+    # ADR-0004 rule 2 that walked straight past every check added for it — found
+    # by the security reviewer, with a repro, after the rest of this was done.
+    if scope != "user":
+        env = os.environ.get("CLAUDE_PLUGIN_OPTION_" + key.upper())
+        if env:
+            return env
 
     for path in settings_files(scope):
         try:

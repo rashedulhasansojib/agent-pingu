@@ -206,8 +206,10 @@ task orphaned from its epic. Run it before a PR; it exits non-zero so CI can.
 
 ```
 .claude-plugin/
-  plugin.json     manifest, and the userConfig prompted at enable time
-                  (vault_dir, gh_repo, autonomy)
+  plugin.json      manifest, and the userConfig prompted at enable time
+                   (vault_dir, gh_repo, autonomy)
+  marketplace.json the catalogue `/plugin marketplace add` reads. The version
+                   lives in plugin.json alone, never in both
 
 skills/           phases advance the state machine; disciplines are techniques
   start           router — picks the lane, sequences phases, delegates
