@@ -22,6 +22,7 @@ point — the alternative is the confident green tick this repo exists to avoid.
 
 import json
 import os
+import pathlib
 import re
 import shutil
 import subprocess
@@ -34,10 +35,37 @@ from conftest import BASH, PLUGIN_ROOT, isolated_env
 PLACEHOLDER = "${CLAUDE_PLUGIN_ROOT}"
 
 
-def hook_commands(event):
-    """Every command string `hooks.json` declares for one event."""
+def hook_entries(event, shell="bash"):
+    """Every hook declared for one event, for one declared shell.
+
+    Entries are filtered by their `shell` key rather than returned as bare
+    strings, because since ADR-0006 an event carries one entry per shell and the
+    two are written in different languages. Running a PowerShell command through
+    bash is not a weaker test, it is a *wrong* one — and it passes: bash exits 2
+    on a syntax error, which is exactly the code the fail-closed test asserts. It
+    went green against a command that had never run.
+    """
     hooks = json.loads((PLUGIN_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-    return [h["command"] for entry in hooks["hooks"].get(event, []) for h in entry["hooks"]]
+    return [h for entry in hooks["hooks"].get(event, []) for h in entry["hooks"]
+            if h.get("shell", "bash") == shell]
+
+
+def hook_commands(event, shell="bash"):
+    return [h["command"] for h in hook_entries(event, shell)]
+
+
+PWSH = shutil.which("pwsh") or shutil.which("powershell")
+
+NEEDS_PWSH = pytest.mark.skipif(
+    PWSH is None, reason="no PowerShell on this machine; ADR-0006's Windows path")
+
+
+def shell_argv(shell, command):
+    """How Claude Code would invoke this command, for the shell it declares."""
+    body = command.replace(PLACEHOLDER, str(PLUGIN_ROOT))
+    if shell == "powershell":
+        return [PWSH, "-NoProfile", "-NonInteractive", "-Command", body]
+    return [shutil.which(BASH) or BASH, "-c", body]
 
 
 def hook_env(repo, path=None):
@@ -50,27 +78,21 @@ def hook_env(repo, path=None):
     """
     env = isolated_env(repo)
     env["PATH"] = os.environ.get("PATH", "") if path is None else path
+    env["CLAUDE_PLUGIN_ROOT"] = str(PLUGIN_ROOT)
     return env
 
 
-def run_hook(command, repo, payload=None, path=None):
-    """Run a declared hook command the way Claude Code does: through a shell.
+def run_hook(command, repo, payload=None, path=None, shell="bash"):
+    """Run a declared hook command through the shell it declares.
 
     These commands are *shell form* — no `args` key — which per ADR-0005 is
     deliberate, because only a shell can resolve an interpreter and still exit 2
     when it cannot. So they must be executed by a shell here too. They used to be
     `shlex.split` into an argv, which stopped being meaningful the moment the
-    command became a script rather than a bare invocation: argv[0] became
-    `PY=$(command`, every command "failed to resolve", and the helper silently
-    substituted `sys.executable` and tested nothing that was declared.
+    command became a script rather than a bare invocation.
     """
-    # Absolute, because the missing-interpreter cases hand this a PATH with
-    # nothing on it — including bash. Resolving the shell against that PATH would
-    # fail to spawn at all, and the test would "pass" or error for a reason that
-    # has nothing to do with the interpreter under test.
-    shell = shutil.which(BASH) or BASH
     return subprocess.run(
-        [shell, "-c", command.replace(PLACEHOLDER, str(PLUGIN_ROOT))],
+        shell_argv(shell, command),
         cwd=repo, env=hook_env(repo, path),
         input=json.dumps(payload) if payload is not None else "",
         capture_output=True, text=True,
@@ -102,8 +124,8 @@ def test_the_session_start_command_runs_and_reports_the_vault(command, repo):
 
 # ------------------------------------------------------------------- PreToolUse
 
-def guard_commands():
-    return [c for c in hook_commands("PreToolUse") if "guard" in c]
+def guard_commands(shell="bash"):
+    return [c for c in hook_commands("PreToolUse", shell) if "guard" in c]
 
 
 def test_the_guard_hook_is_declared():
@@ -145,6 +167,20 @@ def test_the_guard_command_allows_an_edit_inside_the_vault(command, repo):
 # ----------------------------------------------------- the interpreter, on record
 
 NO_PYTHON_PATH = "/nonexistent-agent-pingu-empty-bin"
+
+
+def _path_without_bash():
+    """The real PATH minus any directory containing a bash, so the PowerShell
+    entry's stand-down branch does not fire. Windows CI has Git Bash, which is
+    exactly the machine these tests must pretend not to be."""
+    keep = []
+    for part in os.environ.get("PATH", "").split(os.pathsep):
+        if not part:
+            continue
+        if any((pathlib.Path(part) / n).exists() for n in ("bash", "bash.exe")):
+            continue
+        keep.append(part)
+    return os.pathsep.join(keep)
 
 # Skipped by *capability*, not by platform name — the same convention as
 # NEEDS_O_NOFOLLOW, and for the same reason. These two tests prove ADR-0005's
@@ -199,29 +235,35 @@ def test_session_start_does_not_block_when_no_interpreter_resolves(command, repo
         "SessionStart exited 2, which blocks. Only the guard may fail closed.")
 
 
-def test_both_hooks_resolve_the_interpreter_the_same_way():
+@pytest.mark.parametrize("shell", ["bash", "powershell"])
+def test_both_hooks_resolve_the_interpreter_the_same_way(shell):
     """ADR-0005 rule 5: the visible hook is the canary for the invisible one.
 
     SessionStart prints `[pingu]` lines a human sees. PreToolUse is silent when
     it allows. Because both resolve the interpreter identically, a missing
     `[pingu]` line at session start means the guard is not running either — the
-    only user-facing signal that the gate is down. It exists only while the two
-    stay identical, and nothing else would notice them diverging.
+    only user-facing signal that the gate is down.
+
+    ADR-0006 put two entries on each event, one per shell, so the invariant is now
+    **per shell** rather than global: whichever entry actually fires on a machine,
+    the same one fires for both events, so the inference still holds there. Left
+    global it would have compared a bash resolver against a PowerShell one and
+    failed for a reason that has nothing to do with the property.
     """
     def resolver(command):
-        """The interpreter-choosing expression, i.e. what is inside `$( ... )`.
-
-        Not "everything before the first `;`" — the two commands carry different
-        diagnostic messages, and those contain semicolons, so that comparison
-        fails for a reason unrelated to what this test is about.
-        """
-        found = re.search(r"\$\((.*?)\)", command)
+        if shell == "powershell":
+            found = re.search(r"@\((.*?)\)", command)
+        else:
+            found = re.search(r"\$\((.*?)\)", command)
         return found.group(1).strip() if found else command
 
-    resolvers = {resolver(c) for c in hook_commands("SessionStart") + guard_commands()}
+    commands = hook_commands("SessionStart", shell) + guard_commands(shell)
+    assert commands, f"no {shell} hooks declared"
+    resolvers = {resolver(c) for c in commands}
     assert len(resolvers) == 1, (
-        "the hooks no longer resolve the interpreter identically, so a present "
-        f"[pingu] line no longer implies a working guard:\n" + "\n".join(sorted(resolvers)))
+        f"the {shell} hooks no longer resolve the interpreter identically, so a "
+        f"present [pingu] line no longer implies a working guard:\n"
+        + "\n".join(sorted(resolvers)))
 
 
 @pytest.mark.parametrize("command", guard_commands())
@@ -278,3 +320,89 @@ def test_the_interpreter_the_hooks_name_resolves_on_this_platform():
         f"hooks.json tries {', '.join(names)}, and none resolves on this "
         f"platform — SessionStart would report nothing and the guard would "
         f"refuse every edit")
+
+
+# --------------------------------------------------- the PowerShell path, ADR-0006
+#
+# These are the whole point of ADR-0006 and they cannot run on macOS or Linux.
+# They skip by *capability* — no PowerShell present — so on the Windows cell,
+# which has it, they run. Verifying the stock-Windows path on a runner is the
+# closest thing to a Windows workstation available here, and it is a great deal
+# closer than reasoning about it, which this repo is three-for-three wrong at.
+
+@NEEDS_PWSH
+@pytest.mark.parametrize("command", guard_commands("powershell"))
+def test_the_powershell_guard_blocks_an_edit_outside_a_template_vault(command, repo):
+    """The same claim as the bash guard, in the other language.
+
+    `bash` is hidden from PATH so the stand-down branch does not fire — that
+    branch is what the next test is for, and conflating the two would let a guard
+    that always stands down pass as a guard that blocks.
+    """
+    result = run_hook(command, repo, {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(repo / "src" / "feature.py")},
+    }, path=_path_without_bash(), shell="powershell")
+
+    assert result.returncode == 2, (
+        f"the PowerShell guard exited {result.returncode}, not 2 (blocked)\n"
+        f"--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}")
+
+
+@NEEDS_PWSH
+@pytest.mark.parametrize("command", guard_commands("powershell"))
+def test_the_powershell_guard_allows_an_edit_inside_the_vault(command, repo):
+    """Setup has to be able to write the files that are blocking setup."""
+    result = run_hook(command, repo, {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(repo / "docs" / "vault" / "context.md")},
+    }, path=_path_without_bash(), shell="powershell")
+
+    assert result.returncode == 0, (
+        f"the PowerShell guard blocked a write inside the vault\n{result.stderr}")
+
+
+@NEEDS_PWSH
+@pytest.mark.parametrize("command", guard_commands("powershell"))
+def test_the_powershell_guard_fails_closed_when_no_interpreter_resolves(command, repo):
+    """ADR-0005 rule 2, carried into the PowerShell path rather than dropped.
+
+    This is the claim ADR-0005 said could not be met without a POSIX shell, and
+    the reason ADR-0006 supersedes it in part. `!= 0` would pass on the
+    command-not-found code and assert nothing; it must be 2.
+    """
+    result = run_hook(command, repo, {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(repo / "src" / "feature.py")},
+    }, path=NO_PYTHON_PATH, shell="powershell")
+
+    assert result.returncode == 2, (
+        f"with no interpreter and no bash the PowerShell guard exited "
+        f"{result.returncode}, not 2 — anything else lets the edit through\n"
+        f"--- stderr ---\n{result.stderr}")
+
+
+@NEEDS_PWSH
+@pytest.mark.parametrize("command", guard_commands("powershell") + hook_commands("SessionStart", "powershell"))
+def test_the_powershell_entry_stands_down_when_bash_is_present(command, repo):
+    """The mutual exclusion that stops double execution.
+
+    Both entries fire on a Windows box that has Git Bash — the platform has no
+    conditional in the hook schema, and every entry in an event runs. Without a
+    stand-down the guard would run twice and `[pingu]` would print twice.
+
+    Exit 0 rather than a refusal, because on `PreToolUse` 0 means "no decision,
+    use the normal flow" — it does not overrule the bash entry's 2. A stand-down
+    that exited 2 would block every edit on every Windows machine with Git Bash.
+    """
+    result = run_hook(command, repo, {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(repo / "src" / "feature.py")},
+    }, shell="powershell")
+
+    assert result.returncode == 0, (
+        f"the PowerShell entry did not stand down with bash on PATH; it exited "
+        f"{result.returncode}\n--- stderr ---\n{result.stderr}")
+    assert "[pingu]" not in result.stdout, (
+        "the PowerShell entry produced output while standing down, so a machine "
+        f"with both shells would report twice:\n{result.stdout}")

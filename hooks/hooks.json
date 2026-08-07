@@ -7,6 +7,11 @@
             "type": "command",
             "shell": "bash",
             "command": "PY=\"$(command -v python3 || command -v python)\" || { echo 'agent-pingu: no python3 or python on PATH, so lane, phase and autonomy will not reach this session' >&2; exit 1; }; exec \"$PY\" \"${CLAUDE_PLUGIN_ROOT}\"/scripts/pingu.py status --quiet"
+          },
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "if (Get-Command bash -ErrorAction SilentlyContinue) { exit 0 }; $py = @('python','py','python3') | ForEach-Object { Get-Command $_ -ErrorAction SilentlyContinue } | Select-Object -First 1; if (-not $py) { [Console]::Error.WriteLine('agent-pingu: no python, py or python3 on PATH, so lane, phase and autonomy will not reach this session'); exit 1 }; & $py.Source \"${CLAUDE_PLUGIN_ROOT}/scripts/pingu.py\" status --quiet; exit $LASTEXITCODE"
           }
         ]
       }
@@ -19,6 +24,11 @@
             "type": "command",
             "shell": "bash",
             "command": "PY=\"$(command -v python3 || command -v python)\" || { echo 'agent-pingu: no python3 or python on PATH, so the setup guard cannot run; refusing the edit rather than allowing it unchecked' >&2; exit 2; }; exec \"$PY\" \"${CLAUDE_PLUGIN_ROOT}\"/scripts/pingu.py guard"
+          },
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "if (Get-Command bash -ErrorAction SilentlyContinue) { exit 0 }; $py = @('python','py','python3') | ForEach-Object { Get-Command $_ -ErrorAction SilentlyContinue } | Select-Object -First 1; if (-not $py) { [Console]::Error.WriteLine('agent-pingu: no python, py or python3 on PATH, so the setup guard cannot run; refusing the edit rather than allowing it unchecked'); exit 2 }; & $py.Source \"${CLAUDE_PLUGIN_ROOT}/scripts/pingu.py\" guard; exit $LASTEXITCODE"
           }
         ]
       }
