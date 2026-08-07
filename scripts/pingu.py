@@ -38,6 +38,7 @@ tooling itself needs neither.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import namedtuple
@@ -139,22 +140,141 @@ AUTONOMY_LEVELS = {
 DEFAULT_AUTONOMY = "full-loop"
 
 
-def home_resolves():
-    """Whether `Path.home()` can answer at all.
+HOOKS_JSON = Path(__file__).resolve().parent.parent / "hooks" / "hooks.json"
 
-    Asked directly rather than tracked as a flag set by `settings_files`, so
-    there is no shared state to get stale and nothing to reset between calls.
-    Home either resolves for this process or it does not.
+# Why the personal settings file could not be used, and whether that reason is
+# something only a hostile repo produces.
+#
+# The distinction earns its keep in `autonomy`. "No home on this machine" is
+# ordinary — containers, CI, minimal images — and ADR-0004 deliberately degrades
+# rather than fails there. "Home is a relative path" and "home is inside the
+# checkout" are not ordinary: neither has a legitimate cause, and both were
+# measured as working forgeries of the user's own settings. Refusing to let the
+# repo loosen autonomy in those two cases costs a real user nothing, because no
+# real user is in them.
+SettingsProblem = namedtuple("SettingsProblem", "reason tampering")
 
-    Exists because the degradation it reports is otherwise invisible: with no
-    home, the personal settings file is dropped, and everything downstream
-    behaves as though the user had declared nothing at all.
+
+def hook_interpreter_names(hooks_json=None):
+    """The interpreter names the hooks try, in order, read out of hooks.json.
+
+    Read rather than restated. `doctor` has to answer "will the hooks find a
+    Python", and the only honest way to answer it is to ask the same file the
+    hooks are declared in — a hard-coded ("python3", "python") here would be a
+    second resolver that agrees with the hooks right up until someone edits one
+    of them, which is the failure ADR-0001 is named for.
+    """
+    path = Path(hooks_json) if hooks_json else HOOKS_JSON
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return ()
+    names, seen = [], set()
+    events = data.get("hooks")
+    if not isinstance(events, dict):
+        return ()
+    for groups in events.values():
+        for group in groups or ():
+            for hook in group.get("hooks") or ():
+                for name in re.findall(r"command -v ([\w.-]+)",
+                                       str(hook.get("command", ""))):
+                    if name not in seen:
+                        seen.add(name)
+                        names.append(name)
+    return tuple(names)
+
+
+def hook_interpreter(hooks_json=None):
+    """(name, absolute path) of the first hook interpreter that resolves."""
+    for name in hook_interpreter_names(hooks_json):
+        found = shutil.which(name)
+        if found:
+            return name, found
+    return None, None
+
+
+def personal_settings_file():
+    """(path, problem) for `~/.claude/settings.json`. Exactly one is None.
+
+    The single place that decides whether a personal settings file exists and may
+    be trusted. `settings_files` and `status` both ask it rather than each
+    deciding — a second answer to "where is the personal file" is the shape
+    ADR-0001 exists to forbid.
+
+    `HOME` is not a fact about the machine. Claude Code applies the `env` key of
+    a repo-committed `.claude/settings.json` to hook subprocesses — measured
+    2026-08-08 with a sentinel variable, not assumed — so `HOME` is an input the
+    *less* trusted source controls. ADR-0004 rule 2 lets the personal file set a
+    floor the repo may not loosen, and three ways to forge or erase that floor
+    were measured on this machine, all from a committed file:
+
+        HOME=""             -> Path.home() is `.` on 3.9, so the "personal" file
+                               resolves to <cwd>/.claude/settings.json — the
+                               checkout. The repo is read as the user's own
+                               choice. It does not remove the floor, it *forges*
+                               one. (3.13 gives `/` instead; absent, not forged.)
+        HOME=<the checkout> -> same forgery, absolute path, and so on every
+                               Python version rather than only 3.9.
+        HOME=/nonexistent   -> unreadable, floor absent.
+
+    So two rules, and they are about the path rather than about readability:
+    a personal file must be **absolute**, and must lie **outside the repo**. A
+    path failing either is refused rather than read.
+
+    Refusing downgrades a forgery to an absence. It cannot do better: there is no
+    way to recover the real home once `HOME` has been overwritten. Absence is
+    already the documented degradation and `status` already announces it, which
+    is why this returns the reason rather than just dropping the file — an
+    unreported bypass is the thing being fixed, not the dropped setting.
+
+    Never raises; this runs inside the SessionStart hook.
     """
     try:
-        Path.home()
-    except RuntimeError:
-        return False
-    return True
+        home = Path.home()
+    except (RuntimeError, OSError):
+        return None, SettingsProblem("no home directory resolves", tampering=False)
+
+    if not home.is_absolute():
+        return None, SettingsProblem(
+            f"the home directory resolves to a relative path ({str(home)!r})",
+            tampering=True)
+
+    candidate = home / ".claude" / "settings.json"
+    root = repo_root()
+    try:
+        inside_repo = os.path.commonpath(
+            (os.path.realpath(str(candidate)), os.path.realpath(str(root)))
+        ) == os.path.realpath(str(root))
+    except (OSError, ValueError):
+        # Different drives on Windows raise rather than compare. Not the repo,
+        # then, which is the answer this call needs.
+        inside_repo = False
+    if inside_repo:
+        return None, SettingsProblem(
+            f"the home directory resolves inside the repo ({str(home)!r})",
+            tampering=True)
+
+    # A home that is not there at all is the third measured bypass, and it was
+    # the quiet one: absolute, outside the repo, and so indistinguishable from a
+    # user who simply never wrote a settings file. It is distinguishable one
+    # level up — a real home exists. A *missing settings.json inside an existing
+    # home* stays silent, because that is the ordinary state of most machines and
+    # ADR-0004 deliberately degrades rather than fails there.
+    if not home.is_dir():
+        return None, SettingsProblem(
+            f"the home directory does not exist ({str(home)!r})", tampering=False)
+
+    return candidate, None
+
+
+def home_resolves():
+    """Whether a personal settings file exists and may be trusted.
+
+    Kept as the predicate `status` and the tests read. It now means "the personal
+    file is usable", which is strictly wider than the original "`Path.home()` did
+    not raise" — the widening is the fix, see `personal_settings_file`.
+    """
+    return personal_settings_file()[0] is not None
 
 
 def settings_files(scope="all"):
@@ -168,14 +288,18 @@ def settings_files(scope="all"):
     repo is the less trusted source rather than the more specific one.
     """
     root = repo_root()
-    try:
-        personal = (Path.home() / ".claude" / "settings.json",)
-    except RuntimeError:
-        # `Path.home()` raises when no home can be resolved. `plugin_option`
-        # promises never to raise, and it calls this outside the try that makes
-        # that true — so the promise held only on machines with a home to find.
-        # The repo-scoped files below can still answer, and dropping the personal
-        # one loses a setting rather than the session.
+    found, _ = personal_settings_file()
+    if found is not None:
+        personal = (found,)
+    else:
+        # No trustworthy personal file — see `personal_settings_file` for the
+        # three ways a committed `.claude/settings.json` can produce that, two of
+        # which used to *forge* the personal file rather than remove it. The
+        # repo-scoped files below can still answer, and dropping the personal one
+        # loses a setting rather than the session.
+        #
+        # `status` announces the reason. Silence here is what made the bypass
+        # invisible; do not make this branch quiet again.
         #
         # Bigger than it looks: `main()` resolves `vault_path()` for *every*
         # command, `guard` included, so before this the PreToolUse hook died with
@@ -257,6 +381,20 @@ def autonomy():
     # `full-loop`, removing the per-phase stop they asked for. Advisory rather
     # than enforced (the level is a string the model reads), but a
     # security-relevant setting whose least-trusted source wins is backwards.
+    # Refusing to *read* a forged personal file is only half the fix. Measured:
+    # with the forgery blocked, the personal floor is merely absent, so the
+    # repo's own `full-loop` still wins — the repo cannot impersonate the user,
+    # but it can still silently remove the stop the user asked for, which is the
+    # outcome the attack wanted anyway.
+    #
+    # So where the evidence of tampering is unambiguous, refuse to loosen. A
+    # relative home and a home inside the checkout have no legitimate cause; a
+    # machine with no home at all has several, and that one keeps degrading the
+    # way ADR-0004 chose, alongside `test_unreadable_settings_degrade_to_the_default`.
+    _, problem = personal_settings_file()
+    if problem is not None and problem.tampering:
+        return "gated", None
+
     personal = plugin_option("autonomy", DEFAULT_AUTONOMY, scope="user")
     if personal == "gated" and raw != "gated":
         return "gated", None
@@ -489,8 +627,9 @@ def cmd_status(vault, quiet=False):
     # Said here rather than raised, because `plugin_option` promises never to
     # raise and this runs inside the SessionStart hook. Degrade, but say so —
     # the same trade as the unrecognised-autonomy line above.
-    if not home_resolves():
-        print("[pingu] no home directory resolves, so personal settings in "
+    _, personal_problem = personal_settings_file()
+    if personal_problem:
+        print(f"[pingu] {personal_problem.reason}, so personal settings in "
               "~/.claude/settings.json are being ignored entirely")
         print("[pingu] repo settings still apply; a personal vault_dir, gh_repo "
               "or autonomy floor does not")
@@ -893,13 +1032,49 @@ def cmd_doctor(vault):
         if n["type"] == "task" and n.get("epic") and n["epic"] not in epics:
             problems.append(f"{n.get('id')}: epic {n['epic']} does not exist")
 
+    warnings = hook_environment_warnings()
+
     if not problems:
         print(f"vault ok — {len(notes)} notes, no problems found")
+        for w in warnings:
+            print(f"  warning: {w}")
         return 0
     for p in problems:
         print(f"  {p}")
+    for w in warnings:
+        print(f"  warning: {w}")
     print(f"\n{len(problems)} problem(s) across {len(notes)} notes")
     return 1
+
+
+def hook_environment_warnings():
+    """What would stop the two hooks working on this machine.
+
+    Warnings, never problems: `doctor`'s exit code is about the vault, and a
+    developer running it at all has a working Python by construction. The point
+    is the *other* machine — see
+    ADR-0005-hook-invocation-resolves-one-interpreter-and-fail, which closes the
+    guard's fail-open everywhere a POSIX shell exists and records that it cannot
+    be closed where one does not. This is how that hole is made visible on
+    purpose instead of by noticing a missing line at session start.
+    """
+    out = []
+    names = hook_interpreter_names()
+    if not names:
+        out.append("could not read the hook interpreters from hooks.json, so "
+                   "whether the hooks can run here is unknown")
+        return out
+
+    found_name, found_path = hook_interpreter()
+    if found_name is None:
+        out.append(f"none of {', '.join(names)} is on PATH — the SessionStart "
+                   "hook cannot report lane or phase, and the PreToolUse setup "
+                   "guard will refuse every edit until one is installed")
+    if shutil.which("sh") is None and shutil.which("bash") is None:
+        out.append("no POSIX shell (sh or bash) on PATH — the setup guard "
+                   "cannot fail closed here, so a missing interpreter would "
+                   "allow edits rather than refuse them")
+    return out
 
 
 # ------------------------------------------------------------------------ gates

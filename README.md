@@ -31,14 +31,30 @@ mid-execute, what the reviewers found, and what was left open on purpose:
 
 ## Install
 
-Any folder under a skills directory that contains `.claude-plugin/plugin.json`
-loads as a plugin — no marketplace, no install step.
+**For yourself — start here.** In Claude Code:
 
-**For yourself**, on every project you work on:
+```
+/plugin marketplace add rashedulhasansojib/agent-pingu
+/plugin install agent-pingu@agent-pingu
+```
+
+That is the whole install. `/plugin marketplace update agent-pingu` picks up new
+releases later, which the clone below cannot do without re-cloning.
+
+<details>
+<summary>Or clone it into a skills directory</summary>
+
+Any folder under a skills directory containing `.claude-plugin/plugin.json` loads
+in place, which is what you want if you intend to edit the plugin itself:
 
 ```bash
 git clone https://github.com/rashedulhasansojib/agent-pingu.git ~/.claude/skills/agent-pingu
 ```
+
+An installed copy takes precedence over a cloned one of the same name, so pick
+one. `claude plugin list` says which is loaded and which is shadowed.
+
+</details>
 
 **For a team**, so everyone on the repo gets it from a plain `git clone`. Drop
 the inner `.git` — that is the whole trick, and it is not optional:
@@ -62,9 +78,13 @@ git add .claude && git commit -m "Add agent-pingu"
 > `--recurse-submodules`. Anyone who clones normally gets the same empty
 > directory. Vendoring has no such footgun, and the cost is that updating means
 > re-cloning rather than `git pull`.
+>
+> **Prefer the marketplace install above unless you specifically need the plugin
+> pinned inside the repo.** It has no manual step that can be skipped, and no
+> failure mode that looks like success.
 
 Restart Claude Code and confirm with `claude plugin list` — you should see
-`agent-pingu@skills-dir`. Then scaffold a repo, from wherever you put the plugin:
+`agent-pingu`, loaded. Then scaffold a repo, from wherever you put the plugin:
 
 ```bash
 cd <your repo>
@@ -99,6 +119,15 @@ Two things Windows genuinely does not get, both stated rather than implied: the
 `bin/` wrappers are exercised only on POSIX, and the `O_NOFOLLOW` hardening on
 the one file this tooling writes at a steerable path is POSIX-only — a platform
 without the flag keeps a working allocator and loses that protection.
+
+**The two hooks need a POSIX shell and a Python on PATH — `python3` or `python`,
+either will do.** They resolve one before running anything, and if neither is
+there the setup guard *refuses edits* rather than allowing them unchecked. That
+is deliberate: a gate that cannot run must not silently grant permission. On a
+Windows box with no Git Bash the hooks run under PowerShell, where they cannot
+fail closed at all, so that configuration is unsupported rather than degraded.
+Run `pingu doctor` to be told which of these is missing instead of inferring it
+from a hook that stayed quiet.
 
 ## Lanes
 

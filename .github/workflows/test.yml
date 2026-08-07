@@ -69,6 +69,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: plugin.json is valid JSON
         run: python -c "import json; json.load(open('.claude-plugin/plugin.json'))"
+      - name: marketplace.json is valid JSON
+        run: python -c "import json; json.load(open('.claude-plugin/marketplace.json'))"
       - name: hooks.json is valid JSON
         run: python -c "import json; json.load(open('hooks/hooks.json'))"
 
@@ -81,5 +83,13 @@ jobs:
         with:
           node-version: "22"
       - run: npm install -g @anthropic-ai/claude-code
-      - name: claude plugin validate
-        run: claude plugin validate .
+      # Both manifests, each named explicitly. `validate .` is not enough and is
+      # actively misleading: with a marketplace.json present it validates *only*
+      # the marketplace and stops checking the plugin — so adding the marketplace
+      # silently retired this job's real check. Found by running it.
+      - name: claude plugin validate (plugin)
+        run: claude plugin validate ./.claude-plugin/plugin.json
+      # --strict here but not above, because the plugin manifest emits a warning
+      # about CLAUDE.md that this repo keeps deliberately; see CLAUDE.md itself.
+      - name: claude plugin validate (marketplace)
+        run: claude plugin validate ./.claude-plugin/marketplace.json --strict

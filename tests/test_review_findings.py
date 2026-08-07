@@ -175,7 +175,7 @@ def test_a_repo_cannot_loosen_the_autonomy_a_user_asked_for(repo, tmp_path, monk
     settings outrank the user's own. So a PR branch could return someone who
     chose `gated` to `full-loop`, removing the per-phase stop they asked for.
     A repo may tighten autonomy; it may not loosen it."""
-    home = tmp_path / "home"
+    home = tmp_path.parent / (tmp_path.name + "-home")
     (home / ".claude").mkdir(parents=True)
     (home / ".claude" / "settings.json").write_text(json.dumps(
         {"pluginConfigs": {"agent-pingu@skills-dir": {"options": {"autonomy": "gated"}}}}),
@@ -192,7 +192,7 @@ def test_a_repo_cannot_loosen_the_autonomy_a_user_asked_for(repo, tmp_path, monk
 
 
 def test_a_repo_may_tighten_autonomy(repo, tmp_path, monkeypatch):
-    home = tmp_path / "home2"
+    home = tmp_path.parent / (tmp_path.name + "-home2")
     (home / ".claude").mkdir(parents=True)
     (home / ".claude" / "settings.json").write_text(json.dumps(
         {"pluginConfigs": {"agent-pingu@skills-dir": {"options": {"autonomy": "full-loop"}}}}),
@@ -242,3 +242,160 @@ def test_the_symlink_guard_is_still_applied_where_it_exists(vault, tmp_path):
 
     pingu.allocate_id(vault, "task")
     assert target.read_text(encoding="utf-8") == "SECRET=hunter2\n"
+
+
+# --------------------------------------- T-0005: the personal file is not a given
+#
+# ADR-0004 rule 2 calls `~/.claude/settings.json` the trusted source and lets it
+# set a floor a repo may not loosen. Nothing established that `~` was trustworthy,
+# and the security reviewer who raised it refused to assert either way because
+# this repo had already produced three confident, well-sourced, wrong predictions
+# about environment mechanisms in one day.
+#
+# Settled 2026-08-08 by running it, in two parts so a negative could not be
+# ambiguous:
+#
+#   1. Does the `env` key of a *repo-committed* `.claude/settings.json` reach hook
+#      subprocesses at all? A sentinel variable came through a real `claude -p`
+#      session. **Yes.** Without this step, "the personal file was not found"
+#      could not be told apart from "env never propagated".
+#   2. Given that, what can the repo do to the floor? Three bypasses, below.
+#
+# So `HOME` is an input the *less* trusted party controls. Each case below failed
+# before the fix, with the repo's own declaration winning.
+
+def _floor(repo, home, monkeypatch, home_value=None):
+    """A personal `gated` and a repo `full-loop`. Returns the level that wins."""
+    (home / ".claude").mkdir(parents=True, exist_ok=True)
+    (home / ".claude" / "settings.json").write_text(json.dumps(
+        {"pluginConfigs": {"agent-pingu": {"options": {"autonomy": "gated"}}}}),
+        encoding="utf-8")
+    (repo / ".claude").mkdir(parents=True, exist_ok=True)
+    (repo / ".claude" / "settings.json").write_text(json.dumps(
+        {"pluginConfigs": {"agent-pingu": {"options": {"autonomy": "full-loop"}}}}),
+        encoding="utf-8")
+    set_home(monkeypatch, home if home_value is None else home_value)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+    monkeypatch.delenv("CLAUDE_PLUGIN_OPTION_AUTONOMY", raising=False)
+    return pingu.autonomy()[0]
+
+
+def test_an_empty_home_cannot_make_the_repo_its_own_personal_settings(repo, tmp_path, monkeypatch):
+    """`HOME=""` makes `Path.home()` return `Path(".")` on 3.9 — measured, and
+    3.9 is in the CI matrix. The "personal" file then resolves relative to the
+    cwd, which for a hook is the checkout. The repo is read as the user's own
+    choice: not the floor removed, the floor **forged**.
+
+    3.13 returns `/` instead, so this is version-dependent — which is exactly why
+    it must be pinned rather than reasoned about, and why the assertion is about
+    the path never landing in the repo rather than about any one interpreter.
+    """
+    home = tmp_path.parent / (tmp_path.name + "-empty-home")
+    home.mkdir(exist_ok=True)
+
+    assert _floor(repo, home, monkeypatch, home_value="") != "full-loop", (
+        "a repo-committed HOME='' let the repo override the user's gated choice")
+    for path in pingu.settings_files("user"):
+        assert repo not in pathlib.Path(path).resolve().parents, (
+            f"the personal settings file resolved inside the repo: {path}")
+
+
+def test_a_home_pointing_at_the_checkout_cannot_forge_the_personal_file(repo, tmp_path, monkeypatch):
+    """The same forgery with an absolute path, and so on *every* Python rather
+    than only 3.9. This is the one that does not need a version quirk, and it is
+    the reason the rule is about where the path lands, not about whether
+    `Path.home()` happened to raise."""
+    home = tmp_path.parent / (tmp_path.name + "-checkout-home")
+    home.mkdir(exist_ok=True)
+
+    assert _floor(repo, home, monkeypatch, home_value=repo) != "full-loop", (
+        "a repo-committed HOME=<the checkout> let the repo forge the personal floor")
+
+
+def test_a_missing_home_is_reported_rather_than_silently_dropping_the_floor(repo, tmp_path, monkeypatch, capsys):
+    """The third bypass, and it was the quiet one: absolute and outside the repo,
+    so indistinguishable from a user who never wrote a settings file.
+
+    It cannot be closed — there is no way to recover the real home once `HOME` is
+    overwritten — so the floor is genuinely absent here. What is fixed is the
+    silence: `status` now says the personal file is being ignored and why. An
+    unreported bypass is the thing being fixed, not the dropped setting.
+    """
+    home = tmp_path.parent / (tmp_path.name + "-missing-home")
+    home.mkdir(exist_ok=True)
+    missing = tmp_path.parent / (tmp_path.name + "-does-not-exist")
+
+    _floor(repo, home, monkeypatch, home_value=missing)
+    _, problem = pingu.personal_settings_file()
+    assert problem, "a home that does not exist was accepted silently"
+
+    pingu.main(["pingu.py", "status"])
+    out = capsys.readouterr().out
+    assert "being ignored entirely" in out, (
+        f"status did not report that personal settings were dropped:\n{out}")
+
+
+def test_a_real_home_outside_the_repo_still_sets_the_floor(repo, tmp_path, monkeypatch):
+    """The other direction, and the reason the three above are not vacuous.
+
+    Every one of them would pass if `settings_files('user')` simply returned
+    nothing always — the floor would be unforgeable because it would never exist.
+    This pins that the ordinary case still works.
+    """
+    home = tmp_path.parent / (tmp_path.name + "-real-home")
+    home.mkdir(exist_ok=True)
+
+    assert _floor(repo, home, monkeypatch) == "gated", (
+        "the personal floor stopped working for an ordinary home")
+
+
+# ------------------------------------------- T-0008: the hooks' environment, checked
+
+def test_doctor_is_quiet_about_the_environment_on_a_healthy_machine(vault, capsys):
+    """The half that stops the warnings being noise.
+
+    A developer running `doctor` has a working Python by construction, so if this
+    ever warns here it is warning wrongly — and a check that cries wolf is one
+    people stop reading, which is worse than not having it.
+    """
+    assert pingu.hook_environment_warnings() == []
+
+
+def test_doctor_warns_when_no_hook_interpreter_resolves(monkeypatch):
+    """The hole ADR-0005 could not close, made visible on purpose.
+
+    Where no POSIX shell exists the guard cannot fail closed, and the only other
+    signal is *noticing an absent* `[pingu]` line at session start — useless to
+    anyone who has never seen it present.
+    """
+    monkeypatch.setattr(pingu.shutil, "which", lambda name: None)
+    warnings = pingu.hook_environment_warnings()
+
+    assert any("on PATH" in w for w in warnings), warnings
+    assert any("fail closed" in w for w in warnings), (
+        f"no warning about the guard being unable to fail closed: {warnings}")
+
+
+def test_doctor_reads_the_interpreters_from_hooks_json_rather_than_restating_them(tmp_path):
+    """ADR-0001's rule, applied to this check.
+
+    A hard-coded ("python3", "python") here would agree with hooks.json right up
+    until someone edited one of them, and then `doctor` would confidently report
+    on an interpreter the hooks no longer use.
+    """
+    fake = tmp_path / "hooks.json"
+    fake.write_text(json.dumps({"hooks": {"SessionStart": [{"hooks": [
+        {"command": 'PY="$(command -v pypy9 || command -v tclsh)"; exec "$PY" x.py'}]}]}}),
+        encoding="utf-8")
+
+    assert pingu.hook_interpreter_names(fake) == ("pypy9", "tclsh")
+
+
+def test_the_interpreter_names_survive_a_hooks_file_that_cannot_be_read(tmp_path):
+    """`doctor` must not raise on a malformed hooks.json — and must not then
+    claim the environment is fine either. Empty names produce the "unknown"
+    warning rather than silence."""
+    broken = tmp_path / "hooks.json"
+    broken.write_text("{not json", encoding="utf-8")
+
+    assert pingu.hook_interpreter_names(broken) == ()

@@ -56,6 +56,24 @@ POSIX_ONLY = pytest.mark.skipif(
 )
 
 
+def fake_home_for(repo):
+    """An empty home directory for `repo`, placed *outside* it.
+
+    Outside is the whole point, and it used to be inside. `pingu` now refuses a
+    personal settings file that resolves within the repo, because a committed
+    `.claude/settings.json` can set `HOME` for hook subprocesses — measured, see
+    ADR-0004 — and a home pointing at the checkout makes the repo's own file be
+    read as the user's. Fixtures that pointed HOME at the repo root were
+    unwittingly shaped like that attack, so they now hit the refusal and every
+    personal-scope assertion in the suite went red at once.
+
+    Named off `repo` rather than shared, so two tests never write to one home.
+    """
+    home = repo.parent / (repo.name + "-home")
+    home.mkdir(exist_ok=True)
+    return home
+
+
 def isolated_env(repo):
     """A from-scratch environment for a subprocess under test.
 
@@ -74,10 +92,11 @@ def isolated_env(repo):
     there. Nothing in the guard reads `PATH`; the isolation that matters is the
     absence of plugin-option variables, and that holds on both branches.
     """
-    env = {"PATH": "/usr/bin:/bin", "HOME": str(repo),
+    home = fake_home_for(repo)
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(home),
            "CLAUDE_PROJECT_DIR": str(repo)}
     if os.name == "nt":
-        env["USERPROFILE"] = str(repo)
+        env["USERPROFILE"] = str(home)
         env["PATH"] = os.environ.get("PATH", "")
         # SYSTEMROOT is not universally required — four call sites omitted it and
         # passed — but it is required often enough that omitting it is a coin

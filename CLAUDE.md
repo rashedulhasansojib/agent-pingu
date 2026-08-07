@@ -10,19 +10,26 @@ A Claude Code plugin discovered under a skills directory. Nothing installs it;
 step, and a broken file is live the moment it is saved.
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install pytest
+python3 -m venv .venv && .venv/bin/pip install pytest pyyaml
 .venv/bin/python -m pytest tests/ -q
-claude plugin validate .
+claude plugin validate ./.claude-plugin/plugin.json
+claude plugin validate ./.claude-plugin/marketplace.json --strict
 ```
 
-Both must pass before a commit. CI runs pytest on 3.9 and 3.13, `bash -n` over
-`bin/` and `vault_init.sh`, and `claude plugin validate`.
+All must pass before a commit. CI runs pytest on 3.9 and 3.13, `bash -n` over
+`bin/` and `vault_init.sh`, and both validates.
+
+**Name the manifest you mean.** `claude plugin validate .` used to validate the
+plugin; since `marketplace.json` exists it validates *only the marketplace* and
+silently stops checking the plugin. Adding the marketplace therefore retired
+CI's real check without failing anything — found by running it, which is the only
+way it could have been found.
 
 `validate` warns that this file "is not loaded as project context." That warning
 is about shipping context to repos that *install* the plugin, which is not what
 this file is for — it is read when you open Claude Code here, in the plugin's own
-repo, and it does load. Exit code is 0, so CI stays green. Don't delete it to
-silence the warning.
+repo, and it does load. Exit code is 0, so CI stays green (hence `--strict` on
+the marketplace only). Don't delete it to silence the warning.
 
 ## Docs and code are coupled, and tests enforce it
 
@@ -38,6 +45,7 @@ guard it protects:
 | a `mkdir` in `scripts/vault_init.sh` | the vault tree in `MANUAL.md` |
 | the CI matrix in `.github/workflows/test.yml` | the `**Platforms.**` paragraph in `README.md` |
 | `EDITING_TOOLS` in `scripts/pingu.py` | the `PreToolUse` matcher in `hooks/hooks.json` |
+| `.claude-plugin/marketplace.json` | the `## Install` section in `README.md` |
 
 This is the project's main quality mechanism. When you add a guard like these,
 **mutation-test it** — break the thing it watches and confirm it goes red. Two
@@ -57,6 +65,29 @@ a matcher naming only `MultiEdit` passed and neither `MultiEdit` nor
 `NotebookEdit` was ever checked. Set equality, and mutation-tested three ways:
 dropping `NotebookEdit` from the matcher, adding a tool to `EDITING_TOOLS` alone,
 and the exact matcher the old assertion waved through.
+
+## The hooks must fail closed, and only exit 2 does that
+
+Claude Code treats **only exit 2** as blocking. Exit 1 — the conventional Unix
+failure — is a *non-blocking* error, and the tool call proceeds. So any way
+`pingu guard` can fail without exiting 2 is a silent permission grant on the
+machines the gate exists to protect. Measured: with no Python on PATH the old
+`python3 …` command exited 127 and a real `claude -p` session let the Write
+through, with an exit-2 hook as the control proving the probe could see a block.
+
+Hence the resolver in `hooks/hooks.json`: it picks an interpreter *before*
+invoking anything and exits 2 when it cannot. Two rules follow.
+
+- **Never chain `||` onto the guard invocation.** `guard` returns 2 to mean
+  *blocked*, so a retry-on-failure turns every block into an allow while the
+  happy path stays green. The `||` belongs inside the `$( )` that chooses the
+  interpreter, and nowhere else.
+- **Keep both hooks' resolvers byte-identical.** SessionStart is visible and
+  PreToolUse is silent when it allows, so a present `[pingu]` line is the only
+  signal that the guard is running. That inference holds only while they match.
+
+This is why the hooks stay in shell form against the docs' own preference: exec
+form cannot fail closed, because a failure to spawn is not exit 2.
 
 ## Frontmatter is fragile in a way nothing warns you about
 

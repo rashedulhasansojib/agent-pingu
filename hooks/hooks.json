@@ -5,7 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/pingu.py status --quiet"
+            "shell": "bash",
+            "command": "PY=\"$(command -v python3 || command -v python)\" || { echo 'agent-pingu: no python3 or python on PATH, so lane, phase and autonomy will not reach this session' >&2; exit 1; }; exec \"$PY\" \"${CLAUDE_PLUGIN_ROOT}\"/scripts/pingu.py status --quiet"
           }
         ]
       }
@@ -16,7 +17,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/scripts/pingu.py guard"
+            "shell": "bash",
+            "command": "PY=\"$(command -v python3 || command -v python)\" || { echo 'agent-pingu: no python3 or python on PATH, so the setup guard cannot run; refusing the edit rather than allowing it unchecked' >&2; exit 2; }; exec \"$PY\" \"${CLAUDE_PLUGIN_ROOT}\"/scripts/pingu.py guard"
           }
         ]
       }
