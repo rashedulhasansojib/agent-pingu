@@ -101,7 +101,14 @@ def isolated_env(repo):
         # SYSTEMROOT is not universally required — four call sites omitted it and
         # passed — but it is required often enough that omitting it is a coin
         # flip nobody should have to debug.
-        for passthrough in ("SYSTEMROOT", "SystemRoot", "TEMP", "TMP"):
+        # PATHEXT is not optional, and its absence is invisible until PowerShell
+        # is involved. `Get-Command python` resolves `python.exe` *via PATHEXT*;
+        # with the variable missing, every executable lookup fails and the hook
+        # reports "no python on PATH" on a machine that plainly has one. Three
+        # PowerShell tests failed on the Windows cell for exactly this, and the
+        # bash tests passed alongside them because Git Bash does not need it —
+        # so the harness looked healthy from every angle but the new one.
+        for passthrough in ("SYSTEMROOT", "SystemRoot", "TEMP", "TMP", "PATHEXT"):
             if passthrough in os.environ:
                 env[passthrough] = os.environ[passthrough]
     return env
