@@ -16,12 +16,19 @@ wrong, it is left in — that is the part worth reading.
 
 ## 1. Install, once per machine
 
-A folder under a skills directory containing `.claude-plugin/plugin.json` is
-discovered in place. There is no install step and no marketplace.
+```
+/plugin marketplace add rashedulhasansojib/agent-pingu
+/plugin install agent-pingu@agent-pingu
+```
+
+A folder under a skills directory containing `.claude-plugin/plugin.json` is also
+discovered in place, which is the route to take if you mean to edit the plugin:
 
 ```bash
 git clone https://github.com/rashedulhasansojib/agent-pingu.git ~/.claude/skills/agent-pingu
 ```
+
+Pick one — an installed copy shadows a cloned one of the same name.
 
 Developing the plugin itself? Symlink instead, so your edits apply live:
 

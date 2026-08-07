@@ -6,15 +6,28 @@ Brief instructions for daily use. Read once; keep the lane table handy.
 
 ## 1. Install
 
-A folder under a skills directory containing `.claude-plugin/plugin.json` is
-discovered in place — there is nothing to install:
+Install from the marketplace:
+
+```
+/plugin marketplace add rashedulhasansojib/agent-pingu
+/plugin install agent-pingu@agent-pingu
+```
+
+Or clone it, since a folder under a skills directory containing
+`.claude-plugin/plugin.json` is discovered in place:
 
 ```bash
 git clone https://github.com/rashedulhasansojib/agent-pingu.git ~/.claude/skills/agent-pingu          # personal
 git clone https://github.com/rashedulhasansojib/agent-pingu.git <repo>/.claude/skills/agent-pingu     # shared via git
 ```
 
-Restart Claude Code. Confirm with `claude plugin list` — you should see `agent-pingu@skills-dir`.
+Pick one route: an installed copy takes precedence over a cloned one of the same
+name, and `claude plugin list` will say the cloned one is shadowed rather than
+loaded. The shared-via-git line above also needs its inner `.git` removed before
+committing — see README, where the reason is spelled out.
+
+Restart Claude Code. Confirm with `claude plugin list` — you should see
+`agent-pingu` loaded, from whichever route you chose.
 
 Developing the plugin itself? Symlink instead — discovery follows the link, and edits then apply in place:
 
@@ -133,10 +146,11 @@ see which one you are on rather than inferring it from behaviour:
 [pingu] autonomy: gated — stops after every phase for your approval
 ```
 
-There is no CLI equivalent to `/plugin` for setting it. `--config` is a flag on
-`claude plugin install`, and a plugin discovered under a skills directory is
-never installed — it is loaded in place, so there is nothing for `install` to act
-on. To edit the file directly, the value lives under `pluginConfigs`:
+If you installed from the marketplace, `claude plugin install --config KEY=VALUE`
+sets these. If you cloned into a skills directory there is no CLI equivalent to
+`/plugin`, because such a plugin is never installed — it is loaded in place, so
+there is nothing for `install` to act on. To edit the file directly either way,
+the value lives under `pluginConfigs`:
 
 ```json
 { "pluginConfigs": { "agent-pingu@skills-dir": { "options": { "autonomy": "gated" } } } }
