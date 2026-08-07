@@ -32,22 +32,57 @@ mid-execute, what the reviewers found, and what was left open on purpose:
 ## Install
 
 Any folder under a skills directory that contains `.claude-plugin/plugin.json`
-loads as a plugin — no marketplace, no install step. So put this there:
+loads as a plugin — no marketplace, no install step.
+
+**For yourself**, on every project you work on:
 
 ```bash
-git clone https://github.com/rashedulhasansojib/agent-pingu.git ~/.claude/skills/agent-pingu        # personal
-# or, into a repo, to share it with the team through git:
-git clone https://github.com/rashedulhasansojib/agent-pingu.git <your repo>/.claude/skills/agent-pingu
+git clone https://github.com/rashedulhasansojib/agent-pingu.git ~/.claude/skills/agent-pingu
 ```
 
-Restart Claude Code and confirm with `claude plugin list` — you should see
-`agent-pingu@skills-dir`. Then scaffold a repo:
+**For a team**, so everyone on the repo gets it from a plain `git clone`. Drop
+the inner `.git` — that is the whole trick, and it is not optional:
 
 ```bash
-cd <your repo> && ~/.claude/skills/agent-pingu/scripts/vault_init.sh
+cd <your repo>
+git clone https://github.com/rashedulhasansojib/agent-pingu.git .claude/skills/agent-pingu
+rm -rf .claude/skills/agent-pingu/.git      # vendor it, do not nest it
+git add .claude && git commit -m "Add agent-pingu"
+```
+
+> **Why the `rm -rf`.** Cloning a git repo inside a git repo and committing it
+> stages a *gitlink*, not files. Git says so at `git add` time — "clones of the
+> outer repository will not contain the contents of the embedded repository" —
+> and then your teammate clones, gets an empty `.claude/skills/agent-pingu/`
+> directory that looks correct, and the plugin silently never loads. Verified,
+> not theorised: a teammate's plain clone got the project's own files and none of
+> the plugin's.
+>
+> A submodule works too, but only for teammates who remember to clone with
+> `--recurse-submodules`. Anyone who clones normally gets the same empty
+> directory. Vendoring has no such footgun, and the cost is that updating means
+> re-cloning rather than `git pull`.
+
+Restart Claude Code and confirm with `claude plugin list` — you should see
+`agent-pingu@skills-dir`. Then scaffold a repo, from wherever you put the plugin:
+
+```bash
+cd <your repo>
+~/.claude/skills/agent-pingu/scripts/vault_init.sh    # if you installed it for yourself
+./.claude/skills/agent-pingu/scripts/vault_init.sh    # if the repo carries it
 ```
 
 Restart Claude Code, then say **"set up the vault"**. The loop reads your repo and drafts the standards, context index, and glossary, asking you only about what it cannot infer. Until that is done, session start reports `SETUP NEEDED` and the loop will offer setup before starting new work — those files are loaded by every phase, so leaving them as templates is what produces generic output.
+
+**Commit the vault.** `vault_init.sh` writes it into your repo, and it belongs in
+git alongside the code it describes — that is the entire point: state that
+outlives a context window, reviewed in the same pull request as the behaviour it
+documents. Do not gitignore it.
+
+The one exception is this repository, which gitignores its own `docs/` because
+those are notes about building the plugin rather than a project the plugin is
+being used on. If you are reading this repo's layout as an example, that is the
+one line not to copy.
 
 Needs Python 3, git, and `gh` for Issue mirroring. Obsidian needs Dataview for the board.
 
@@ -197,9 +232,15 @@ tests/            pytest and pyyaml; the tooling itself has no dependencies
   test_skills.py  docs and code agreeing — lane table vs LANES, gate table vs
                   GATES, frontmatter validity, plugin identity, this diagram
 
-.github/workflows/
-  test.yml        pytest on 3.9 and 3.13, shell syntax, claude plugin validate
+.github/
+  workflows/test.yml
+                  pytest on Linux 3.9 and 3.13, macOS and Windows; shell syntax;
+                  claude plugin validate
+  ISSUE_TEMPLATE/ bug report, and the pointer to private security reporting
 ```
+
+`CONTRIBUTING.md` is a pointer; `CLAUDE.md` is the real contributor guide.
+`SECURITY.md` covers the threat model and how to report privately.
 
 That is what ships. What it *creates* is `docs/vault/` inside your repo — see
 the `vault` skill for that tree.
