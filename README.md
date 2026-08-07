@@ -120,14 +120,18 @@ Two things Windows genuinely does not get, both stated rather than implied: the
 the one file this tooling writes at a steerable path is POSIX-only — a platform
 without the flag keeps a working allocator and loses that protection.
 
-**The two hooks need a POSIX shell and a Python on PATH — `python3` or `python`,
-either will do.** They resolve one before running anything, and if neither is
-there the setup guard *refuses edits* rather than allowing them unchecked. That
-is deliberate: a gate that cannot run must not silently grant permission. On a
-Windows box with no Git Bash the hooks run under PowerShell, where they cannot
-fail closed at all, so that configuration is unsupported rather than degraded.
-Run `pingu doctor` to be told which of these is missing instead of inferring it
-from a hook that stayed quiet.
+**The two hooks need a shell and a Python on PATH.** They resolve an interpreter
+before running anything, and if none is found the setup guard *refuses edits*
+rather than allowing them unchecked — a gate that cannot run must not silently
+grant permission. Run `pingu doctor` to be told what is missing rather than
+inferring it from a hook that stayed quiet.
+
+Each hook is declared twice, once for `bash` and once for PowerShell, because the
+hook schema has no way to branch on the operating system. Stock Windows — Python
+from python.org, no Git Bash — takes the PowerShell path, which resolves
+`python`, `py` or `python3`. With Git Bash present the PowerShell copy stands down
+so nothing runs twice. Both paths are exercised on the Windows CI cell, including
+the fail-closed case.
 
 ## Lanes
 
