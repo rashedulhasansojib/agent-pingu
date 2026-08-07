@@ -284,6 +284,20 @@ def personal_settings_file():
             f"the home directory resolves to a relative path ({str(home)!r})",
             tampering=True)
 
+    # The filesystem root is nobody's home, and `HOME=""` lands here on 3.13
+    # exactly as it lands on the relative-path branch above on 3.9 — the two
+    # interpreters disagree (`Path(".")` vs `Path("/")`) and both are in the CI
+    # matrix. Classifying only the 3.9 shape as tampering left the *same attack*
+    # closed on one interpreter and silently open on the other, with
+    # `problem is None` so nothing even reported it.
+    #
+    # `home == home.parent` is the version- and platform-independent way to ask
+    # "is this the root", and it is true of `C:\` as well as `/`.
+    if home == home.parent:
+        return None, SettingsProblem(
+            f"the home directory is the filesystem root ({str(home)!r})",
+            tampering=True)
+
     candidate = home / ".claude" / "settings.json"
     if _is_inside(candidate, repo_root()):
         return None, SettingsProblem(
