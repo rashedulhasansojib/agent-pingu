@@ -59,8 +59,11 @@ def test_the_marketplace_entry_does_not_carry_its_own_version(marketplace, manif
     one, and then users silently stop receiving updates while the manifest says
     they should be.
 
-    Verified by installing: `claude plugin list` reported `Version: 0.4.0`, which
-    could only have come from plugin.json.
+    Verified by installing from the real marketplace: `claude plugin list`
+    reported the manifest's version, which could only have come from
+    plugin.json. Re-checked at 0.5.0 against a GitHub-sourced install, not a
+    local path — the README documents the GitHub form and only that form is
+    evidence for it.
     """
     assert "version" in manifest, "plugin.json must be the one place a version lives"
     for entry in marketplace["plugins"]:
