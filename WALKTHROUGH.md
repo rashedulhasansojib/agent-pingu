@@ -44,7 +44,7 @@ claude plugin list
 
 ```
 ❯ agent-pingu@skills-dir
-  Version: 0.4.0
+  Version: 0.5.0
   Scope: user
   Path: ~/.claude/skills/agent-pingu
   Status: ✔ loaded
