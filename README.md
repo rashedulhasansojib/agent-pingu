@@ -133,6 +133,17 @@ from python.org, no Git Bash — takes the PowerShell path, which resolves
 so nothing runs twice. Both paths are exercised on the Windows CI cell, including
 the fail-closed case.
 
+> **Two things about stock Windows are still unverified**, and are stated here
+> rather than left for you to discover. First, that Claude Code *selects*
+> PowerShell when Git Bash is absent — the documentation says so and the runner
+> cannot test it, because every Windows runner has Git Bash. Second, whether the
+> standing-down copy prints a visible error on each hook fire; the headless
+> harness used here is demonstrably blind to hook notices, so its silence is not
+> evidence. What **is** verified on a Windows runner is that the PowerShell
+> commands themselves behave — blocking, allowing, failing closed with no
+> interpreter, and standing down. If you run this on a Windows box without Git
+> Bash, an issue saying which of the two happened would be genuinely useful.
+
 ## Lanes
 
 The loop picks one from the request rather than forcing everything through a feature pipeline.
