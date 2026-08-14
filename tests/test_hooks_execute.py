@@ -406,3 +406,39 @@ def test_the_powershell_entry_stands_down_when_bash_is_present(command, repo):
     assert "[pingu]" not in result.stdout, (
         "the PowerShell entry produced output while standing down, so a machine "
         f"with both shells would report twice:\n{result.stdout}")
+
+
+@NEEDS_PWSH
+@pytest.mark.parametrize("command", guard_commands("bash"))
+def test_the_bash_guard_does_not_block_if_it_ends_up_under_powershell(command, repo):
+    """The worst case of the one thing ADR-0006 could not measure.
+
+    On a Windows box with no Git Bash, the `shell: "bash"` entry is asked for a
+    shell that is not there. What Claude Code does then is **undocumented**: it
+    may fail to spawn, or it may fall back to PowerShell the way it does when no
+    `shell` is pinned at all. If it falls back, this bash-syntax command is parsed
+    by PowerShell, and the exit code of that parse failure decides whether stock
+    Windows works or is bricked.
+
+    Bricked is a real possibility rather than a paranoid one: **bash itself exits
+    2 on a syntax error**, which is measured elsewhere in this file, and 2 is
+    exactly the code that blocks. If PowerShell did the same, every edit on every
+    stock-Windows machine would be refused by the entry that was supposed to be
+    inert there — and the PowerShell entry beside it, which does the real work,
+    could not overrule it.
+
+    So this asserts the *safety property* rather than the routing: whatever
+    PowerShell makes of a bash script, it must not come back as 2. That is
+    testable on the Windows runner today, where both shells exist, and it holds
+    regardless of which way the routing question in T-0011 is eventually answered.
+    """
+    result = run_hook(command, repo, {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(repo / "src" / "feature.py")},
+    }, shell="powershell")
+
+    assert result.returncode != 2, (
+        "the bash-pinned guard exited 2 when parsed by PowerShell. On a Windows "
+        "box with no Git Bash that would block every edit, permanently, and the "
+        "PowerShell entry could not overrule it.\n"
+        f"--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}")
